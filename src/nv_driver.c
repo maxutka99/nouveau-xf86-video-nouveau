@@ -1515,6 +1515,7 @@ NVPreInit(ScrnInfoPtr pScrn, int flags)
 	    return FALSE;
     }
 
+    NVCommonSetup(pScrn);
     NVI2CInit(pScrn);
 
     NvSetupOutputs(pScrn);
@@ -1537,9 +1538,9 @@ NVPreInit(ScrnInfoPtr pScrn, int flags)
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "No valid modes.\n");
 	return FALSE;
     }    
-	
-    NVCommonSetup(pScrn);
 
+
+    NVPreInitOldCode(pScrn);
     pScrn->videoRam = pNv->RamAmountKBytes;
     xf86DrvMsg(pScrn->scrnIndex, X_PROBED, "VideoRAM: %d kBytes\n",
                pScrn->videoRam);

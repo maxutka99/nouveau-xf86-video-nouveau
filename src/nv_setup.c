@@ -352,12 +352,6 @@ NVCommonSetup(ScrnInfoPtr pScrn)
     NVPtr pNv = NVPTR(pScrn);
     vgaHWPtr pVga = VGAHWPTR(pScrn);
     CARD16 implementation = pNv->Chipset & 0x0ff0;
-    xf86MonPtr monitorA, monitorB;
-    Bool mobile = FALSE;
-    Bool tvA = FALSE;
-    Bool tvB = FALSE;
-    int FlatPanel = -1;   /* really means the CRTC is slaved */
-    Bool Television = FALSE;
     
     /*
      * Override VGA I/O routines.
@@ -430,6 +424,40 @@ NVCommonSetup(ScrnInfoPtr pScrn)
 
     pNv->BlendingPossible = ((pNv->Chipset & 0xffff) > CHIPSET_NV04);
 
+
+
+    /* Parse the bios to initialize the card */
+    NVSelectHeadRegisters(pScrn, 0);
+    NVParseBios(pScrn);
+    /* reset PFIFO and PGRAPH, then power up all the card units */
+    nvWriteMC(pNv, 0x200, 0x17110013);
+    usleep(1000);
+    nvWriteMC(pNv, 0x200, 0x17111113);
+
+    if(pNv->Architecture == NV_ARCH_03)
+        nv3GetConfig(pNv);
+    else if(pNv->Architecture == NV_ARCH_04)
+        nv4GetConfig(pNv);
+    else
+        nv10GetConfig(pNv);
+
+    NVSelectHeadRegisters(pScrn, 0);
+
+    NVLockUnlock(pNv, 0);
+}
+
+
+void NVPreInitOldCode(ScrnInfoPtr pScrn)
+{
+  NVPtr pNv = NVPTR(pScrn);
+    xf86MonPtr monitorA, monitorB;
+    Bool mobile = FALSE;
+    Bool tvA = FALSE;
+    Bool tvB = FALSE;
+    int FlatPanel = -1;   /* really means the CRTC is slaved */
+    Bool Television = FALSE;
+    CARD16 implementation = pNv->Chipset & 0x0ff0;
+
     /* look for known laptop chips */
     /* FIXME we could add some ids here (0x0164,0x0167,0x0168,0x01D6,0x01D7,0x01D8,0x0298,0x0299,0x0398) */
     switch(pNv->Chipset & 0xffff) {
@@ -484,26 +512,6 @@ NVCommonSetup(ScrnInfoPtr pScrn)
     default:
         break;
     }
-
-    /* Parse the bios to initialize the card */
-    NVSelectHeadRegisters(pScrn, 0);
-    NVParseBios(pScrn);
-    /* reset PFIFO and PGRAPH, then power up all the card units */
-    nvWriteMC(pNv, 0x200, 0x17110013);
-    usleep(1000);
-    nvWriteMC(pNv, 0x200, 0x17111113);
-
-    if(pNv->Architecture == NV_ARCH_03)
-        nv3GetConfig(pNv);
-    else if(pNv->Architecture == NV_ARCH_04)
-        nv4GetConfig(pNv);
-    else
-        nv10GetConfig(pNv);
-
-    NVSelectHeadRegisters(pScrn, 0);
-
-    NVLockUnlock(pNv, 0);
-
     pNv->Television = FALSE;
 
     if(!pNv->twoHeads) {
