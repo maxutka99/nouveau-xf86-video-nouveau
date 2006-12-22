@@ -34,6 +34,8 @@
 #include "xf86.h"
 #include "xf86Priv.h"
 #include "xf86DDC.h"
+#include "X11/Xatom.h"
+
 #include "mipointer.h"
 #include "windowstr.h"
 #include <randrstr.h>
@@ -925,3 +927,25 @@ xf86RandR12PreInit (ScrnInfoPtr pScrn)
 {
     return TRUE;
 }
+
+#ifdef RANDR_12_INTERFACE
+
+#define EDID_ATOM_NAME		"EDID_DATA"
+
+void
+nv_ddc_set_edid_property(xf86OutputPtr output, void *data, int data_len)
+{
+    Atom edid_atom = MakeAtom(EDID_ATOM_NAME, sizeof(EDID_ATOM_NAME), TRUE);
+
+    /* This may get called before the RandR resources have been created */
+    if (output->randr_output == NULL)
+	return;
+
+    if (data_len != 0) {
+	RRChangeOutputProperty(output->randr_output, edid_atom, XA_INTEGER, 8,
+			       PropModeReplace, data_len, data, FALSE);
+    } else {
+	RRDeleteOutputProperty(output->randr_output, edid_atom);
+    }
+}
+#endif
