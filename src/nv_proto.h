@@ -100,9 +100,11 @@ void nForceUpdateArbitrationSettings (unsigned      VClk,  unsigned      pixelDe
 
 
 /* nv_crtc.c */
+Bool NVSetMode(ScrnInfoPtr pScrn, DisplayModePtr pMode);
 Bool NVCrtcSetMode(xf86CrtcPtr crtc, DisplayModePtr pMode);
 Bool NVCrtcInUse (xf86CrtcPtr crtc);
-DisplayModePtr NvCrtcFindClosestMode(xf86CrtcPtr crtc, DisplayModePtr pMode);
+DisplayModePtr NVCrtcFindClosestMode(xf86CrtcPtr crtc, DisplayModePtr pMode);
+void NVCrtcSetBase (xf86CrtcPtr crtc, int x, int y);
 void nv_unload_state_ext(xf86CrtcPtr crtc);
 void nv_crtc_load_state (xf86OutputPtr crtc);
 

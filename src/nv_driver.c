@@ -840,7 +840,7 @@ NVSwitchMode(int scrnIndex, DisplayModePtr mode, int flags)
    Bool ret = TRUE;
 
    if (1) { //pNv->currentMode != mode) {
-      if (!NvSetMode(pScrn, mode))
+      if (!NVSetMode(pScrn, mode))
          ret = FALSE;
    }
 
@@ -894,12 +894,12 @@ NVEnterVT(int scrnIndex, int flags)
       /* Mark that we'll need to re-set the mode for sure */
       memset(&crtc->curMode, 0, sizeof(crtc->curMode));
       if (!crtc->desiredMode.CrtcHDisplay)
-	 crtc->desiredMode = *NvCrtcFindClosestMode (crtc, pScrn->currentMode);
+	 crtc->desiredMode = *NVCrtcFindClosestMode (crtc, pScrn->currentMode);
       
-      if (!NvCrtcSetMode (crtc, &crtc->desiredMode, TRUE))
+      if (!NVCrtcSetMode (crtc, &crtc->desiredMode))
 	 return FALSE;
       
-      NvCrtcSetBase(crtc, crtc->x, crtc->y);
+      NVCrtcSetBase(crtc, crtc->x, crtc->y);
    }
 
    //  if (!NVModeInit(pScrn, pScrn->currentMode))

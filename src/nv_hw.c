@@ -416,7 +416,7 @@ void nv4CalcArbitration (
     }
 }
 
-static void nv4UpdateArbitrationSettings (
+void nv4UpdateArbitrationSettings (
     unsigned      VClk, 
     unsigned      pixelDepth, 
     unsigned     *burst,
@@ -643,7 +643,7 @@ void nv10CalcArbitration (
     }
 }
 
-static void nv10UpdateArbitrationSettings (
+void nv10UpdateArbitrationSettings (
     unsigned      VClk, 
     unsigned      pixelDepth, 
     unsigned     *burst,

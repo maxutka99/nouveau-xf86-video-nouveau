@@ -39,15 +39,17 @@
 #include "nv_randr.h"
 #include "nv_include.h"
 
+#include "vgaHW.h"
 
 #define CRTC_INDEX 0x3d4
 #define CRTC_DATA 0x3d5
+#define CRTC_IN_STAT_1 0x3da
 
 #define WHITE_VALUE 0x3F
 #define BLACK_VALUE 0x00
 #define OVERSCAN_VALUE 0x01
 
-static void NVWriteVga(xf86CrtcPtr crtc, CARD8 index, CARD8 value)
+static void NVWriteVgaCrtc(xf86CrtcPtr crtc, CARD8 index, CARD8 value)
 {
   NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
 
@@ -55,7 +57,7 @@ static void NVWriteVga(xf86CrtcPtr crtc, CARD8 index, CARD8 value)
   NV_WR08(nv_crtc->pCRTCReg, CRTC_DATA, value);
 }
 
-static CARD8 NVReadVga(xf86CrtcPtr crtc, CARD8 index)
+static CARD8 NVReadVgaCrtc(xf86CrtcPtr crtc, CARD8 index)
 {
   NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
 
@@ -63,6 +65,91 @@ static CARD8 NVReadVga(xf86CrtcPtr crtc, CARD8 index)
   return NV_RD08(nv_crtc->pCRTCReg, CRTC_DATA);
 }
 
+static void NVWriteVgaSeq(xf86CrtcPtr crtc, CARD8 index, CARD8 value)
+{
+  NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
+
+  NV_WR08(nv_crtc->pCRTCReg, VGA_SEQ_INDEX, index);
+  NV_WR08(nv_crtc->pCRTCReg, VGA_SEQ_DATA, value);
+}
+
+static CARD8 NVReadVgaSeq(xf86CrtcPtr crtc, CARD8 index)
+{
+  NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
+
+  NV_WR08(nv_crtc->pCRTCReg, VGA_SEQ_INDEX, index);
+  return NV_RD08(nv_crtc->pCRTCReg, VGA_SEQ_DATA);
+}
+
+static void NVWriteVgaGr(xf86CrtcPtr crtc, CARD8 index, CARD8 value)
+{
+  NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
+
+  NV_WR08(nv_crtc->pCRTCReg, VGA_GRAPH_INDEX, index);
+  NV_WR08(nv_crtc->pCRTCReg, VGA_GRAPH_DATA, value);
+}
+
+static CARD8 NVReadVgaGr(xf86CrtcPtr crtc, CARD8 index)
+{
+  NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
+
+  NV_WR08(nv_crtc->pCRTCReg, VGA_GRAPH_INDEX, index);
+  return NV_RD08(nv_crtc->pCRTCReg, VGA_GRAPH_DATA);
+} 
+
+
+static void NVWriteVgaAttr(xf86CrtcPtr crtc, CARD8 index, CARD8 value)
+{
+  NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
+
+  NV_RD08(nv_crtc->pCRTCReg, CRTC_IN_STAT_1);
+  if (nv_crtc->paletteEnabled)
+    index &= ~0x20;
+  else
+    index |= 0x20;
+  NV_WR08(nv_crtc->pCRTCReg, VGA_ATTR_INDEX, index);
+  NV_WR08(nv_crtc->pCRTCReg, VGA_ATTR_DATA_W, value);
+}
+
+static CARD8 NVReadVgaAttr(xf86CrtcPtr crtc, CARD8 index)
+{
+  NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
+
+  NV_RD08(nv_crtc->pCRTCReg, CRTC_IN_STAT_1);
+  if (nv_crtc->paletteEnabled)
+    index &= ~0x20;
+  else
+    index |= 0x20;
+  NV_WR08(nv_crtc->pCRTCReg, VGA_ATTR_INDEX, index);
+  return NV_RD08(nv_crtc->pCRTCReg, VGA_ATTR_DATA_R);
+}
+
+static void
+nvEnablePalette(xf86CrtcPtr crtc)
+{
+  NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
+
+  NV_RD08(nv_crtc->pCRTCReg, CRTC_IN_STAT_1);
+  NV_WR08(nv_crtc->pCRTCReg, VGA_ATTR_INDEX, 0);
+  nv_crtc->paletteEnabled = TRUE;
+}
+
+static void
+nvDisablePalette(xf86CrtcPtr crtc)
+{
+  NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
+
+  NV_RD08(nv_crtc->pCRTCReg, CRTC_IN_STAT_1);
+  NV_WR08(nv_crtc->pCRTCReg, VGA_ATTR_INDEX, 0x20);
+  nv_crtc->paletteEnabled = FALSE;
+}
+
+static void NVWriteVgaReg(xf86CrtcPtr crtc, CARD8 reg, CARD8 value)
+{
+  NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
+
+  NV_WR08(nv_crtc->pCRTCReg, reg, value);
+}
 
 /*
  * Calculate the Video Clock parameters for the PLL.
@@ -272,10 +359,9 @@ nv_crtc_dpms(xf86CrtcPtr crtc, int mode)
      NVPtr pNv = NVPTR(pScrn);
      NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
      unsigned char crtc1A;
-     vgaHWPtr hwp = VGAHWPTR(pScrn);
      int ret;
 
-     crtc1A = NVReadVga(crtc, 0x1A) & ~0xC0;
+     crtc1A = NVReadVgaCrtc(crtc, 0x1A) & ~0xC0;
      switch(mode) {
      case DPMSModeStandby:
        crtc1A |= 0x80;
@@ -291,7 +377,7 @@ nv_crtc_dpms(xf86CrtcPtr crtc, int mode)
        break;
      }
      
-     NVWriteVga(crtc, 0x1A, crtc1A);
+     NVWriteVgaCrtc(crtc, 0x1A, crtc1A);
 }
 
 static Bool
@@ -692,6 +778,9 @@ nv_crtc_mode_set(xf86CrtcPtr crtc, DisplayModePtr mode,
 {
     nv_crtc_mode_set_vga(crtc, mode);
     nv_crtc_mode_set_regs(crtc, mode);
+
+    nv_crtc_load_state(crtc);
+    nv_crtc_load_vga_state(crtc);
 }
 
 static const xf86CrtcFuncsRec nv_crtc_funcs = {
@@ -726,6 +815,39 @@ nv_crtc_init(ScrnInfoPtr pScrn, int crtc_num)
     crtc->driver_private = nv_crtc;
 }
 
+void nv_crtc_load_vga_state(xf86OutputPtr crtc)
+{
+    ScrnInfoPtr pScrn = crtc->scrn;
+    NVPtr pNv = NVPTR(pScrn);    
+    NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
+    int i, j;
+    CARD32 temp;
+    RIVA_HW_STATE *state;
+    NVCrtcRegPtr regp;
+
+    state = &pNv->ModeReg;
+    regp = &pNv->ModeReg.crtc_reg[nv_crtc->crtc];
+    
+    nvWriteVGAReg(crtc, VGA_MISC_OUT_W, regp->MiscOutReg);
+
+    for (i = 1; i < 5; i++)
+      nvWriteVgaSeq(crtc, i, regp->Sequencer[i]);
+  
+    /* Ensure CRTC registers 0-7 are unlocked by clearing bit 7 of CRTC[17] */
+    nvWriteVgaCrtc(crtc, 17, regp->CRTC[17] & ~0x80);
+
+    for (i = 0; i < 25; i++)
+      nvWriteVgaCrtc(crtc, i, regp->CRTC[i]);
+
+    for (i = 0; i < 9; i++)
+      nvWriteVgaGr(crtc, i, regp->Graphics[i]);
+    
+    nvEnablePalette(crtc);
+    for (i = 0; i < 21; i++)
+      nvWriteVgaAttr(crtc, i, regp->Attribute[i]);
+    nvDisablePalette(crtc);
+
+}
 void nv_crtc_load_state (xf86OutputPtr crtc)
 {
     ScrnInfoPtr pScrn = crtc->scrn;
@@ -1205,7 +1327,7 @@ NVCrtcSetBase (xf86CrtcPtr crtc, int x, int y)
  * - Closer in refresh rate to the requested mode.
  */
 DisplayModePtr
-NvCrtcFindClosestMode(xf86CrtcPtr crtc, DisplayModePtr pMode)
+NVCrtcFindClosestMode(xf86CrtcPtr crtc, DisplayModePtr pMode)
 {
     ScrnInfoPtr	pScrn = crtc->scrn;
     xf86CrtcConfigPtr   xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
@@ -1388,7 +1510,7 @@ NVCrtcSetMode(xf86CrtcPtr crtc, DisplayModePtr pMode)
  * all active outputs using a mode similar to the specified mode.
  */
 Bool
-NvSetMode(ScrnInfoPtr pScrn, DisplayModePtr pMode)
+NVSetMode(ScrnInfoPtr pScrn, DisplayModePtr pMode)
 {
     xf86CrtcConfigPtr	config = XF86_CRTC_CONFIG_PTR(pScrn);
     Bool ok = TRUE;
@@ -1396,9 +1518,9 @@ NvSetMode(ScrnInfoPtr pScrn, DisplayModePtr pMode)
 
     if (crtc && crtc->enabled)
     {
-	ok = NvPipeSetMode(crtc,
-			   NvPipeFindClosestMode(crtc, pMode), 
-			   TRUE);
+	ok = NVCrtcSetMode(crtc,
+			   NVCrtcFindClosestMode(crtc, pMode));
+
 	if (!ok)
 	    goto done;
 	crtc->desiredMode = *pMode;
