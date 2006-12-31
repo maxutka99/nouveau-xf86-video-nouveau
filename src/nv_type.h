@@ -160,6 +160,7 @@ typedef struct _NVCrtcPrivateRec {
 	int crtc;
         volatile CARD8 *pCRTCReg;
         volatile CARD8 *pDACReg;
+        volatile CARD8 *pVGAReg;
         Bool paletteEnabled;
 } NVCrtcPrivateRec, *NVCrtcPrivatePtr;
 

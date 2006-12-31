@@ -52,6 +52,13 @@
 void nv_crtc_load_vga_state(xf86CrtcPtr crtc);
 void nv_crtc_load_state (xf86CrtcPtr crtc);
 
+static void NVWriteMiscOut(xf86CrtcPtr crtc, CARD8 value)
+{
+  NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
+
+  NV_WR08(nv_crtc->pVGAReg, VGA_MISC_OUT_W, value);
+}
+
 static void NVWriteVgaCrtc(xf86CrtcPtr crtc, CARD8 index, CARD8 value)
 {
   NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
@@ -72,32 +79,32 @@ static void NVWriteVgaSeq(xf86CrtcPtr crtc, CARD8 index, CARD8 value)
 {
   NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
 
-  NV_WR08(nv_crtc->pCRTCReg, VGA_SEQ_INDEX, index);
-  NV_WR08(nv_crtc->pCRTCReg, VGA_SEQ_DATA, value);
+  NV_WR08(nv_crtc->pVGAReg, VGA_SEQ_INDEX, index);
+  NV_WR08(nv_crtc->pVGAReg, VGA_SEQ_DATA, value);
 }
 
 static CARD8 NVReadVgaSeq(xf86CrtcPtr crtc, CARD8 index)
 {
   NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
 
-  NV_WR08(nv_crtc->pCRTCReg, VGA_SEQ_INDEX, index);
-  return NV_RD08(nv_crtc->pCRTCReg, VGA_SEQ_DATA);
+  NV_WR08(nv_crtc->pVGAReg, VGA_SEQ_INDEX, index);
+  return NV_RD08(nv_crtc->pVGAReg, VGA_SEQ_DATA);
 }
 
 static void NVWriteVgaGr(xf86CrtcPtr crtc, CARD8 index, CARD8 value)
 {
   NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
 
-  NV_WR08(nv_crtc->pCRTCReg, VGA_GRAPH_INDEX, index);
-  NV_WR08(nv_crtc->pCRTCReg, VGA_GRAPH_DATA, value);
+  NV_WR08(nv_crtc->pVGAReg, VGA_GRAPH_INDEX, index);
+  NV_WR08(nv_crtc->pVGAReg, VGA_GRAPH_DATA, value);
 }
 
 static CARD8 NVReadVgaGr(xf86CrtcPtr crtc, CARD8 index)
 {
   NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
 
-  NV_WR08(nv_crtc->pCRTCReg, VGA_GRAPH_INDEX, index);
-  return NV_RD08(nv_crtc->pCRTCReg, VGA_GRAPH_DATA);
+  NV_WR08(nv_crtc->pVGAReg, VGA_GRAPH_INDEX, index);
+  return NV_RD08(nv_crtc->pVGAReg, VGA_GRAPH_DATA);
 } 
 
 
@@ -178,6 +185,7 @@ static void NVVgaProtect(xf86CrtcPtr crtc, Bool on)
      * Reenable sequencer, then turn on screen.
      */
     tmp = NVReadVgaSeq(crtc, 0x1);
+    NVWriteVgaSeq(crtc, 0x01, tmp & ~0x20);	/* reenable display */
     NVVgaSeqReset(crtc, FALSE);
 
     NVDisablePalette(crtc);
@@ -453,6 +461,7 @@ nv_crtc_dpms(xf86CrtcPtr crtc, int mode)
      NVWriteVgaSeq(crtc, 0x0, 003);
 
      NVWriteVgaCrtc(crtc, NV_VGA_CRTCX_REPAINT1, crtc1A);
+
 }
 
 static Bool
@@ -902,6 +911,7 @@ nv_crtc_init(ScrnInfoPtr pScrn, int crtc_num)
       nv_crtc->pDACReg = pNv->PDIO1;
     }
     
+    nv_crtc->pVGAReg = pNv->PVIO;
     crtc->driver_private = nv_crtc;
 }
 
@@ -917,8 +927,8 @@ void nv_crtc_load_vga_state(xf86CrtcPtr crtc)
 
     state = &pNv->ModeReg;
     regp = &pNv->ModeReg.crtc_reg[nv_crtc->crtc];
-    
-    NVWriteVgaReg(crtc, VGA_MISC_OUT_W, regp->MiscOutReg);
+
+    NVWriteMiscOut(crtc, regp->MiscOutReg);
 
     for (i = 1; i < 5; i++)
       NVWriteVgaSeq(crtc, i, regp->Sequencer[i]);
