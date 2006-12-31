@@ -893,8 +893,8 @@ NVEnterVT(int scrnIndex, int flags)
 
       /* Mark that we'll need to re-set the mode for sure */
       memset(&crtc->curMode, 0, sizeof(crtc->curMode));
-      if (!crtc->desiredMode.CrtcHDisplay)
-	 crtc->desiredMode = *NVCrtcFindClosestMode (crtc, pScrn->currentMode);
+      //      if (!crtc->desiredMode.CrtcHDisplay)
+      crtc->desiredMode = *NVCrtcFindClosestMode (crtc, pScrn->currentMode);
       
       if (!NVCrtcSetMode (crtc, &crtc->desiredMode))
 	 return FALSE;
@@ -904,7 +904,7 @@ NVEnterVT(int scrnIndex, int flags)
 
    //  if (!NVModeInit(pScrn, pScrn->currentMode))
    //      return FALSE;
-   /// NVAdjustFrame(scrnIndex, pScrn->frameX0, pScrn->frameY0, 0);
+   pScrn->AdjustFrame(scrnIndex, pScrn->frameX0, pScrn->frameY0, 0);
 
     if(pNv->overlayAdaptor)
         NVResetVideo(pScrn);
@@ -2041,6 +2041,10 @@ NVScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
 	/* Save the current state */
 	NVSave(pScrn);
 
+    pScrn->memPhysBase = pNv->VRAMPhysical;
+    pScrn->fbOffset = 0;
+
+
 	
 	//	/* Initialise the first mode */
 	//	if (!NVModeInit(pScrn, pScrn->currentMode)) {
@@ -2050,8 +2054,8 @@ NVScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
 	//    }
 
     /* Darken the screen for aesthetic reasons and set the viewport */
-    NVSaveScreen(pScreen, SCREEN_SAVER_ON);
-    pScrn->AdjustFrame(scrnIndex, pScrn->frameX0, pScrn->frameY0, 0);
+	//    NVSaveScreen(pScreen, SCREEN_SAVER_ON);
+    //    pScrn->AdjustFrame(scrnIndex, pScrn->frameX0, pScrn->frameY0, 0);
 
     /*
      * The next step is to setup the screen's visuals, and initialise the
@@ -2199,6 +2203,17 @@ NVScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
 	NULL, CMAP_RELOAD_ON_MODE_SWITCH | CMAP_PALETTED_TRUECOLOR))
 	return FALSE;
 
+
+#if 1
+    xf86DPMSInit(pScreen, xf86DPMSSet, 0);
+#else
+    if(pNv->FlatPanel)
+       xf86DPMSInit(pScreen, NVDPMSSetLCD, 0);
+    else
+       xf86DPMSInit(pScreen, NVDPMSSet, 0);
+#endif
+    
+
     xf86DisableRandR(); /* Disable built-in RandR extension */
     xf86RandR12Init (pScreen);
     xf86RandR12SetRotations (pScreen, RR_Rotate_0); /* only 0 degrees for I965G */
@@ -2229,15 +2244,6 @@ NVScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
 	ShadowFBInit(pScreen, refreshArea);
     }
 
-#if 1
-    xf86DPMSInit(pScreen, xf86DPMSSet, 0);
-#else
-    if(pNv->FlatPanel)
-       xf86DPMSInit(pScreen, NVDPMSSetLCD, 0);
-    else
-       xf86DPMSInit(pScreen, NVDPMSSet, 0);
-#endif
-    
     pScrn->memPhysBase = pNv->VRAMPhysical;
     pScrn->fbOffset = 0;
 

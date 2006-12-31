@@ -154,6 +154,47 @@ static void NVWriteVgaReg(xf86CrtcPtr crtc, CARD32 reg, CARD8 value)
   NV_WR08(nv_crtc->pCRTCReg, reg, value);
 }
 
+/* perform a sequencer reset */
+static void NVVgaSeqReset(xf86CrtcPtr crtc, Bool start)
+{
+  if (start)
+    NVWriteVgaSeq(crtc, 0x00, 0x1);
+  else
+    NVWriteVgaSeq(crtc, 0x00, 0x3);
+
+}
+static void NVVgaProtect(xf86CrtcPtr crtc, Bool on)
+{
+  CARD8 tmp;
+
+  if (on) {
+    tmp = NVReadVgaSeq(crtc, 0x1);
+    NVVgaSeqReset(crtc, TRUE);
+    NVWriteVgaSeq(crtc, 0x01, tmp | 0x20);
+
+    NVEnablePalette(crtc);
+  } else {
+    /*
+     * Reenable sequencer, then turn on screen.
+     */
+    tmp = NVReadVgaSeq(crtc, 0x1);
+    NVVgaSeqReset(crtc, FALSE);
+
+    NVDisablePalette(crtc);
+  }
+}
+
+static void NVCrtcLockUnlock(xf86CrtcPtr crtc, Bool Lock)
+{
+  CARD8 cr11;
+
+  NVWriteVgaCrtc(crtc, NV_VGA_CRTCX_LOCK, Lock ? 0x99 : 0x57);
+  cr11 = NVReadVgaCrtc(crtc, NV_VGA_CRTCX_VSYNCE);
+  if (Lock) cr11 |= 0x80;
+  else cr11 &= ~0x80;
+  NVWriteVgaCrtc(crtc, NV_VGA_CRTCX_VSYNCE, cr11);
+
+}
 /*
  * Calculate the Video Clock parameters for the PLL.
  */
@@ -720,7 +761,7 @@ nv_crtc_mode_set_regs(xf86CrtcPtr crtc, DisplayModePtr mode)
 
     regp->CRTC[NV_VGA_CRTCX_FIFO1] = nvReadVGA(pNv, NV_VGA_CRTCX_FIFO1) & ~(1<<5);
 
-    if(pNv->CRTCnumber) {
+    if(nv_crtc->crtc) {
        nvReg->head  = nvReadCRTC(pNv, 0, NV_CRTC_HEAD_CONFIG) & ~0x00001000;
        nvReg->head2 = nvReadCRTC(pNv, 1, NV_CRTC_HEAD_CONFIG) | 0x00001000;
        nvReg->crtcOwner = 3;
@@ -728,14 +769,15 @@ nv_crtc_mode_set_regs(xf86CrtcPtr crtc, DisplayModePtr mode)
        nvReg->vpll = nvReadRAMDAC0(pNv, NV_RAMDAC_VPLL);
        if(pNv->twoStagePLL) 
           nvReg->vpllB = nvReadRAMDAC0(pNv, NV_RAMDAC_VPLL_B);
-    } else 
-    if(pNv->twoHeads) {
-       nvReg->head  =  nvReadCRTC(pNv, 0, NV_CRTC_HEAD_CONFIG) | 0x00001000;
-       nvReg->head2 =  nvReadCRTC(pNv, 1, NV_CRTC_HEAD_CONFIG) & ~0x00001000;
-       nvReg->crtcOwner = 0;
-       nvReg->vpll2 = nvReadRAMDAC0(pNv, NV_RAMDAC_VPLL2);
-       if(pNv->twoStagePLL) 
+    } else {
+      if(pNv->twoHeads) {
+	nvReg->head  =  nvReadCRTC(pNv, 0, NV_CRTC_HEAD_CONFIG) | 0x00001000;
+	nvReg->head2 =  nvReadCRTC(pNv, 1, NV_CRTC_HEAD_CONFIG) & ~0x00001000;
+	nvReg->crtcOwner = 0;
+	nvReg->vpll2 = nvReadRAMDAC0(pNv, NV_RAMDAC_VPLL2);
+	if(pNv->twoStagePLL) 
           nvReg->vpll2B = nvReadRAMDAC0(pNv, NV_RAMDAC_VPLL2_B);
+      }
     }
 
     nvReg->cursorConfig = 0x00000100;
@@ -779,11 +821,18 @@ static void
 nv_crtc_mode_set(xf86CrtcPtr crtc, DisplayModePtr mode,
 		 DisplayModePtr adjusted_mode)
 {
-    nv_crtc_mode_set_regs(crtc, mode);
-    nv_crtc_mode_set_vga(crtc, mode);
 
+    nv_crtc_mode_set_vga(crtc, mode);
+    nv_crtc_mode_set_regs(crtc, mode);
+
+    NVCrtcLockUnlock(crtc, 0);
+
+    //    NVVgaProtect(crtc, TRUE);
     nv_crtc_load_state(crtc);
     nv_crtc_load_vga_state(crtc);
+
+    //    NVVgaProtect(crtc, FALSE);
+    //    NVCrtcLockUnlock(crtc, 1);
 }
 
 static const xf86CrtcFuncsRec nv_crtc_funcs = {
@@ -934,7 +983,7 @@ void nv_crtc_load_state(xf86CrtcPtr crtc)
     NVWriteVgaCrtc(crtc, NV_VGA_CRTCX_CURCTL2, regp->CRTC[NV_VGA_CRTCX_CURCTL2]);
     NVWriteVgaCrtc(crtc, NV_VGA_CRTCX_INTERLACE, regp->CRTC[NV_VGA_CRTCX_INTERLACE]);
 
-    if(!pNv->FlatPanel) {
+    if(1/*!pNv->FlatPanel*/) {
        nvWriteRAMDAC0(pNv, NV_RAMDAC_PLL_SELECT, state->pllsel);
        nvWriteRAMDAC0(pNv, NV_RAMDAC_VPLL, state->vpll);
        if(pNv->twoHeads)
@@ -975,7 +1024,7 @@ void nv_unload_state_ext(xf86CrtcPtr crtc)
     regp->CRTC[NV_VGA_CRTCX_FIFO0] = NVReadVgaCrtc(crtc, NV_VGA_CRTCX_FIFO0);
     regp->CRTC[NV_VGA_CRTCX_FIFO_LWM] = NVReadVgaCrtc(crtc, NV_VGA_CRTCX_FIFO_LWM);
     if(pNv->Architecture >= NV_ARCH_30) {
-	regp->CRTC[NV_VGA_CRTCX_FIFO_LWM_NV30] |= NVReadVgaCrtc(crtc, NV_VGA_CRTCX_FIFO_LWM_NV30) & 1) << 8;
+        regp->CRTC[NV_VGA_CRTCX_FIFO_LWM_NV30] |= (NVReadVgaCrtc(crtc, NV_VGA_CRTCX_FIFO_LWM_NV30) & 1) << 8;
     }
     regp->CRTC[NV_VGA_CRTCX_CURCTL0] = NVReadVgaCrtc(crtc, NV_VGA_CRTCX_CURCTL0);
     regp->CRTC[NV_VGA_CRTCX_CURCTL1] = NVReadVgaCrtc(crtc, NV_VGA_CRTCX_CURCTL1);

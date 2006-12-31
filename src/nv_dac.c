@@ -235,12 +235,12 @@ NVDACInit(ScrnInfoPtr pScrn, DisplayModePtr mode)
        if(pNv->twoStagePLL) 
           nvReg->vpllB = nvReadRAMDAC0(pNv, NV_RAMDAC_VPLL_B);
     } else 
-    if(pNv->twoHeads) {
-       nvReg->head  =  nvReadCRTC(pNv, 0, NV_CRTC_HEAD_CONFIG) | 0x00001000;
-       nvReg->head2 =  nvReadCRTC(pNv, 1, NV_CRTC_HEAD_CONFIG) & ~0x00001000;
-       nvReg->crtcOwner = 0;
-       nvReg->vpll2 = nvReadRAMDAC0(pNv, NV_RAMDAC_VPLL2);
-       if(pNv->twoStagePLL) 
+      if(pNv->twoHeads) {
+	nvReg->head  =  nvReadCRTC(pNv, 0, NV_CRTC_HEAD_CONFIG) | 0x00001000;
+	nvReg->head2 =  nvReadCRTC(pNv, 1, NV_CRTC_HEAD_CONFIG) & ~0x00001000;
+	nvReg->crtcOwner = 0;
+	nvReg->vpll2 = nvReadRAMDAC0(pNv, NV_RAMDAC_VPLL2);
+	if(pNv->twoStagePLL) 
           nvReg->vpll2B = nvReadRAMDAC0(pNv, NV_RAMDAC_VPLL2_B);
     }
 

@@ -222,6 +222,8 @@ void NvSetupOutputs(ScrnInfoPtr pScrn)
   int output_type = OUTPUT_DVI;
   int num_outputs = pNv->twoHeads ? 2 : 1;
 
+  pNv->Television = FALSE;
+
   for (i = 0; i<num_outputs; i++) {
     output = xf86OutputCreate (pScrn, &nv_output_funcs, OutputType[output_type]);
     if (!output)
