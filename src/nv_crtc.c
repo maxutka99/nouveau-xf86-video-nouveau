@@ -827,11 +827,11 @@ nv_crtc_mode_set(xf86CrtcPtr crtc, DisplayModePtr mode,
 
     NVCrtcLockUnlock(crtc, 0);
 
-    //    NVVgaProtect(crtc, TRUE);
+    NVVgaProtect(crtc, TRUE);
     nv_crtc_load_state(crtc);
     nv_crtc_load_vga_state(crtc);
 
-    //    NVVgaProtect(crtc, FALSE);
+    NVVgaProtect(crtc, FALSE);
     //    NVCrtcLockUnlock(crtc, 1);
 }
 
