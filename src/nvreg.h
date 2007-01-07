@@ -193,7 +193,8 @@
 
 #define NV_RAMDAC_FP_DEBUG_0        0x880
 #define NV_RAMDAC_FP_DEBUG_0_PWRDOWN_FPCLK (1<<28)
-#define NV_RAMDAC_FP_DEBUG_0_PWRDOWN_TMDS_PLL (1<<29)
+#define NV_RAMDAC_FP_DEBUG_0_PWRDOWN_TMDS_PLL (2<<28)
+#define NV_RAMDAC_FP_DEBUG_0_PWRDOWN_BOTH (3<<28)
 
 #define NV_RAMDAC_FP_TMDS_DATA      0x8b0
 #define NV_RAMDAC_FP_TMDS_LVDS      0x8b4
@@ -206,7 +207,13 @@
 #define NV_CRTC_081C                0x81c
 #define NV_CRTC_0830                0x830
 #define NV_CRTC_0834                0x834
-#define NV_CRTC_HEAD_CONFIG         0x860
+#define NV_CRTC_FSEL                0x860
+#define NV_CRTC_FSEL_I2C           (1<<4)
+#define NV_CRTC_FSEL_TVOUT1        (1<<8)
+#define NV_CRTC_FSEL_TVOUT2        (2<<8)
+#define NV_CRTC_FSEL_OVERLAY       (1<<12)
+#define NV_CRTC_FSEL_FPP2          (1<<16)
+#define NV_CRTC_FSEL_FPP1          (2<<16)
 
 #define NV_PFB_CFG0                 0x200
 #define NV_PFB_CFG1                 0x204

@@ -185,6 +185,7 @@ void nv_output_save_state_ext(xf86OutputPtr output, RIVA_HW_STATE *state)
     state->pllsel       = NVReadRAMDAC0(output, NV_RAMDAC_PLL_SELECT);
     regp->general       = NVReadRAMDAC(output, NV_RAMDAC_GENERAL_CONTROL);
     regp->scale         = NVReadRAMDAC(output, NV_RAMDAC_FP_CONTROL);
+    regp->debug_0	= NVReadRAMDAC(output, NV_RAMDAC_FP_DEBUG_0);
     state->config       = nvReadFB(pNv, NV_PFB_CFG0);
     
     regp->output = NVReadRAMDAC(output, NV_RAMDAC_OUTPUT);
@@ -208,9 +209,9 @@ void nv_output_load_state_ext(xf86OutputPtr output, RIVA_HW_STATE *state)
     regp = &state->dac_reg[nv_output->ramdac];
 
     NVWriteRAMDAC(output, NV_RAMDAC_OUTPUT, regp->output);
+    NVWriteRAMDAC(output, NV_RAMDAC_FP_DEBUG_0, regp->debug_0);
     NVWriteRAMDAC(output, NV_RAMDAC_FP_CONTROL, regp->scale);
     NVWriteRAMDAC(output, NV_RAMDAC_FP_HCRTC, regp->crtcSync);
-
     if(nv_output->mon_type == MT_CRT) {
 	NVWriteRAMDAC0(output, NV_RAMDAC_PLL_SELECT, state->pllsel);
 	NVWriteRAMDAC0(output, NV_RAMDAC_VPLL, state->vpll);
@@ -328,7 +329,7 @@ nv_output_mode_set_regs(xf86OutputPtr output, DisplayModePtr mode)
     regp = &state->dac_reg[nv_output->ramdac];
 
     sv_state = &pNv->SavedReg;
-    savep = &state->dac_reg[nv_output->ramdac];
+    savep = &sv_state->dac_reg[nv_output->ramdac];
     
     if (nv_output->mon_type == MT_LCD || nv_output->mon_type == MT_DFP)
 	is_fp = TRUE;
@@ -338,7 +339,8 @@ nv_output_mode_set_regs(xf86OutputPtr output, DisplayModePtr mode)
 
     regp->bpp    = bpp;    /* this is not bitsPerPixel, it's 8,15,16,32 */
 
-    regp->scale = NVReadRAMDAC(output, NV_RAMDAC_FP_CONTROL) & 0xfff000ff;
+    regp->debug_0 = savep->debug_0;
+    regp->scale = savep->scale & 0xfff000ff;
     if(is_fp == 1) {
        if(!pNv->fpScaler || (nv_output->fpWidth <= mode->HDisplay)
                          || (nv_output->fpHeight <= mode->VDisplay))
@@ -347,7 +349,11 @@ nv_output_mode_set_regs(xf86OutputPtr output, DisplayModePtr mode)
        }
        regp->crtcSync = savep->crtcSync;
        regp->crtcSync += nv_output_tweak_panel(output, state);
+
+       regp->debug_0 |= NV_RAMDAC_FP_DEBUG_0_PWRDOWN_BOTH;
     }
+    else
+	regp->debug_0 &= ~NV_RAMDAC_FP_DEBUG_0_PWRDOWN_BOTH;
 
     if(pNv->twoHeads) {
         if((pNv->Chipset & 0x0ff0) == CHIPSET_NV11) {
