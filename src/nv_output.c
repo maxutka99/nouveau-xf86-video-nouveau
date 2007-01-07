@@ -184,7 +184,7 @@ void nv_output_save_state_ext(xf86OutputPtr output, RIVA_HW_STATE *state)
     }
     state->pllsel       = NVReadRAMDAC0(output, NV_RAMDAC_PLL_SELECT);
     regp->general       = NVReadRAMDAC(output, NV_RAMDAC_GENERAL_CONTROL);
-    regp->scale         = NVReadRAMDAC(output, NV_RAMDAC_FP_CONTROL);
+    regp->fp_control    = NVReadRAMDAC(output, NV_RAMDAC_FP_CONTROL);
     regp->debug_0	= NVReadRAMDAC(output, NV_RAMDAC_FP_DEBUG_0);
     state->config       = nvReadFB(pNv, NV_PFB_CFG0);
     
@@ -210,7 +210,7 @@ void nv_output_load_state_ext(xf86OutputPtr output, RIVA_HW_STATE *state)
 
     NVWriteRAMDAC(output, NV_RAMDAC_OUTPUT, regp->output);
     NVWriteRAMDAC(output, NV_RAMDAC_FP_DEBUG_0, regp->debug_0);
-    NVWriteRAMDAC(output, NV_RAMDAC_FP_CONTROL, regp->scale);
+    NVWriteRAMDAC(output, NV_RAMDAC_FP_CONTROL, regp->fp_control);
     NVWriteRAMDAC(output, NV_RAMDAC_FP_HCRTC, regp->crtcSync);
     if(nv_output->mon_type == MT_CRT) {
 	NVWriteRAMDAC0(output, NV_RAMDAC_PLL_SELECT, state->pllsel);
@@ -340,12 +340,12 @@ nv_output_mode_set_regs(xf86OutputPtr output, DisplayModePtr mode)
     regp->bpp    = bpp;    /* this is not bitsPerPixel, it's 8,15,16,32 */
 
     regp->debug_0 = savep->debug_0;
-    regp->scale = savep->scale & 0xfff000ff;
+    regp->fp_control = savep->fp_control & 0xfff000ff;
     if(is_fp == 1) {
        if(!pNv->fpScaler || (nv_output->fpWidth <= mode->HDisplay)
                          || (nv_output->fpHeight <= mode->VDisplay))
        {
-           regp->scale |= (1 << 8) ;
+           regp->fp_control |= (1 << 8) ;
        }
        regp->crtcSync = savep->crtcSync;
        regp->crtcSync += nv_output_tweak_panel(output, state);

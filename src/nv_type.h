@@ -118,7 +118,7 @@ typedef struct _nv_crtc_reg
 
 typedef struct _nv_output_reg
 {
-    CARD32 scale;
+    CARD32 fp_control;
     CARD32 crtcSync;
     CARD32 dither;
     CARD32 general;
