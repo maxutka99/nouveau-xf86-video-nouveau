@@ -149,7 +149,7 @@ nv_output_dpms(xf86OutputPtr output, int mode)
     if (nv_output->type == OUTPUT_DVI) {
 	CARD32 fpcontrol;
 
-	fpcontrol = NVReadRAMDAC(output, 0x848) & 0xCfffffCC;	
+	fpcontrol = NVReadRAMDAC(output, NV_RAMDAC_FP_CONTROL) & 0xCfffffCC;	
 	switch(mode) {
 	case DPMSModeStandby:
 	case DPMSModeSuspend:
@@ -161,7 +161,7 @@ nv_output_dpms(xf86OutputPtr output, int mode)
 	    fpcontrol |= nv_output->fpSyncs;
 	}
 	
-	NVWriteRAMDAC(output, 0x0848, fpcontrol);
+	NVWriteRAMDAC(output, NV_RAMDAC_FP_CONTROL, fpcontrol);
     }
 
 }
