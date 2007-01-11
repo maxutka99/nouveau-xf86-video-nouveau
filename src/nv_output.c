@@ -380,10 +380,14 @@ nv_output_mode_set_regs(xf86OutputPtr output, DisplayModePtr mode)
     if(bpp != 8) /* DirectColor */
 	regp->general |= 0x00000030;
 
-    if (nv_output->ramdac)
-	regp->output = 0x101;
-    else
-	regp->output = 0x1;
+    if (output->crtc) {
+	NVCrtcPrivatePtr nv_crtc = output->crtc->driver_private;
+
+	if (nv_crtc->crtc == 0)
+	    regp->output = 0x1;
+	else
+	    regp->output = 0x101;
+    }
 
 #if 0
     switch(pNv->Architecture) {
