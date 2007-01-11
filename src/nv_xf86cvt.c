@@ -38,6 +38,7 @@
 #include "xf86.h"
 #include "xorgVersion.h"
 #include "nv_local.h"
+#include "nv_xf86Modes.h"
 #include <string.h>
 
 #if XORG_VERSION_CURRENT <= XORG_VERSION_NUMERIC(7,2,99,2,0)

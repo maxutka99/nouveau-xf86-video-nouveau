@@ -37,6 +37,7 @@
 #include "xf86DDC.h"
 #include "xorgVersion.h"
 #include "nv_local.h"
+#include "nv_xf86Modes.h"
 #include <string.h>
 #include <math.h>
 
