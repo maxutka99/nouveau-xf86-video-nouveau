@@ -333,6 +333,8 @@ nv_output_mode_set_regs(xf86OutputPtr output, DisplayModePtr mode)
     RIVA_HW_STATE *state, *sv_state;
     Bool is_fp = FALSE;
     NVOutputRegPtr regp, savep;
+    xf86CrtcConfigPtr	config = XF86_CRTC_CONFIG_PTR(pScrn);
+    int i;
 
     state = &pNv->ModeReg;
     regp = &state->dac_reg[nv_output->ramdac];
@@ -390,25 +392,25 @@ nv_output_mode_set_regs(xf86OutputPtr output, DisplayModePtr mode)
 
     if (output->crtc) {
 	NVCrtcPrivatePtr nv_crtc = output->crtc->driver_private;
+	int two_crt = FALSE;
 
-	if (nv_crtc->crtc == 0)
-	    regp->output = 0x1;
+	for (i = 0; i < config->num_output; i++) {
+	  if (config->output[i] != output) {
+	    NVOutputPrivatePtr nv_output2 = config->output[i]->driver_private;	    
+	    if (nv_output2->mon_type == MT_CRT)
+	      two_crt = TRUE;
+	  }
+	}
+
+	if (is_fp == TRUE)
+	  regp->output = 0;
+	else if (nv_crtc->crtc == 0 && nv_output->ramdac == 1 && (two_crt == TRUE))
+	  regp->output = 0x101;
 	else
-	    regp->output = 0x101;
+	  regp->output = 0x1;
+
+       
     }
-
-#if 0
-    switch(pNv->Architecture) {
-    case NV_ARCH_04:
-
-      break;
-    case NV_ARCH_10:
-    case NV_ARCH_20:
-    case NV_ARCH_30:
-    default:
-      state->general  = bpp == 16 ? 0x00101100 : 0x00100100;
-      break;
-#endif
 }
 
 static void
