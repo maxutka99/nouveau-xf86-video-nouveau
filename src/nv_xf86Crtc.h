@@ -441,16 +441,16 @@ xf86DPMSSet(ScrnInfoPtr pScrn, int PowerManagementMode, int flags);
  * Set the EDID information for the specified output
  */
 void
-i830_xf86OutputSetEDID (xf86OutputPtr output, xf86MonPtr edid_mon);
+nv_xf86OutputSetEDID (xf86OutputPtr output, xf86MonPtr edid_mon);
 
 /**
  * Return the list of modes supported by the EDID information
  * stored in 'output'
  */
 DisplayModePtr
-i830_xf86OutputGetEDIDModes (xf86OutputPtr output);
+nv_xf86OutputGetEDIDModes (xf86OutputPtr output);
 
 xf86MonPtr
-i830_xf86OutputGetEDID (xf86OutputPtr output, I2CBusPtr pDDCBus);
+nv_xf86OutputGetEDID (xf86OutputPtr output, I2CBusPtr pDDCBus);
 
 #endif /* _XF86CRTC_H_ */

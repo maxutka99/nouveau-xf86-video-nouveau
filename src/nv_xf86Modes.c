@@ -38,7 +38,9 @@
 
 #include "xf86.h"
 #include "nv_xf86Modes.h"
+#include "xf86Priv.h"
 
+extern XF86ConfigPtr xf86configptr;
 /**
  * @file this file contains symbols from xf86Mode.c and friends that are static
  * there but we still want to use.  We need to come up with better API here.
@@ -333,7 +335,7 @@ xf86PrintModeline(int scrnIndex,DisplayModePtr mode)
  * This is not in xf86Modes.c, but would be part of the proposed new API.
  */
 void
-i830xf86ValidateModesFlags(ScrnInfoPtr pScrn, DisplayModePtr modeList,
+nvxf86ValidateModesFlags(ScrnInfoPtr pScrn, DisplayModePtr modeList,
 			    int flags)
 {
     DisplayModePtr mode;
@@ -354,7 +356,7 @@ i830xf86ValidateModesFlags(ScrnInfoPtr pScrn, DisplayModePtr modeList,
  * This is not in xf86Modes.c, but would be part of the proposed new API.
  */
 void
-i830xf86ValidateModesSize(ScrnInfoPtr pScrn, DisplayModePtr modeList,
+nvxf86ValidateModesSize(ScrnInfoPtr pScrn, DisplayModePtr modeList,
 			  int maxX, int maxY, int maxPitch)
 {
     DisplayModePtr mode;
@@ -383,7 +385,7 @@ i830xf86ValidateModesSize(ScrnInfoPtr pScrn, DisplayModePtr modeList,
  * This is not in xf86Modes.c, but would be part of the proposed new API.
  */
 void
-i830xf86ValidateModesSync(ScrnInfoPtr pScrn, DisplayModePtr modeList,
+nvxf86ValidateModesSync(ScrnInfoPtr pScrn, DisplayModePtr modeList,
 			  MonPtr mon)
 {
     DisplayModePtr mode;
@@ -430,7 +432,7 @@ i830xf86ValidateModesSync(ScrnInfoPtr pScrn, DisplayModePtr modeList,
  * This is not in xf86Modes.c, but would be part of the proposed new API.
  */
 void
-i830xf86ValidateModesClocks(ScrnInfoPtr pScrn, DisplayModePtr modeList,
+nvxf86ValidateModesClocks(ScrnInfoPtr pScrn, DisplayModePtr modeList,
 			    int *min, int *max, int n_ranges)
 {
     DisplayModePtr mode;
@@ -464,7 +466,7 @@ i830xf86ValidateModesClocks(ScrnInfoPtr pScrn, DisplayModePtr modeList,
  * This is not in xf86Modes.c, but would be part of the proposed new API.
  */
 void
-i830xf86ValidateModesUserConfig(ScrnInfoPtr pScrn, DisplayModePtr modeList)
+nvxf86ValidateModesUserConfig(ScrnInfoPtr pScrn, DisplayModePtr modeList)
 {
     DisplayModePtr mode;
 
@@ -498,7 +500,7 @@ i830xf86ValidateModesUserConfig(ScrnInfoPtr pScrn, DisplayModePtr modeList)
  * This is not in xf86Modes.c, but would be part of the proposed new API.
  */
 void
-i830xf86PruneInvalidModes(ScrnInfoPtr pScrn, DisplayModePtr *modeList,
+nvxf86PruneInvalidModes(ScrnInfoPtr pScrn, DisplayModePtr *modeList,
 			  Bool verbose)
 {
     DisplayModePtr mode;
@@ -548,4 +550,121 @@ xf86ModesAdd(DisplayModePtr modes, DisplayModePtr new)
     }
 
     return modes;
+}
+
+/**
+ * Build a mode list from a list of config file modes
+ */
+static DisplayModePtr
+nvxf86GetConfigModes (XF86ConfModeLinePtr conf_mode)
+{
+    DisplayModePtr  head = NULL, prev = NULL, mode;
+    
+    for (; conf_mode; conf_mode = (XF86ConfModeLinePtr) conf_mode->list.next)
+    {
+        mode = xalloc(sizeof(DisplayModeRec));
+	if (!mode)
+	    continue;
+        mode->name       = xstrdup(conf_mode->ml_identifier);
+	if (!mode->name)
+	{
+	    xfree (mode);
+	    continue;
+	}
+	
+        memset(mode,'\0',sizeof(DisplayModeRec));
+	mode->type       = 0;
+        mode->Clock      = conf_mode->ml_clock;
+        mode->HDisplay   = conf_mode->ml_hdisplay;
+        mode->HSyncStart = conf_mode->ml_hsyncstart;
+        mode->HSyncEnd   = conf_mode->ml_hsyncend;
+        mode->HTotal     = conf_mode->ml_htotal;
+        mode->VDisplay   = conf_mode->ml_vdisplay;
+        mode->VSyncStart = conf_mode->ml_vsyncstart;
+        mode->VSyncEnd   = conf_mode->ml_vsyncend;
+        mode->VTotal     = conf_mode->ml_vtotal;
+        mode->Flags      = conf_mode->ml_flags;
+        mode->HSkew      = conf_mode->ml_hskew;
+        mode->VScan      = conf_mode->ml_vscan;
+
+        mode->prev = prev;
+	mode->next = NULL;
+	if (prev)
+	    prev->next = mode;
+	else
+	    head = mode;
+	prev = mode;
+    }
+    return head;
+}
+
+/**
+ * Build a mode list from a monitor configuration
+ */
+DisplayModePtr
+nvxf86GetMonitorModes (ScrnInfoPtr pScrn, XF86ConfMonitorPtr conf_monitor)
+{
+    DisplayModePtr	    modes = NULL;
+    XF86ConfModesLinkPtr    modes_link;
+    
+    if (!conf_monitor)
+	return NULL;
+
+    /*
+     * first we collect the mode lines from the UseModes directive
+     */
+    for (modes_link = conf_monitor->mon_modes_sect_lst; 
+	 modes_link; 
+	 modes_link = modes_link->list.next)
+    {
+	/* If this modes link hasn't been resolved, go look it up now */
+	if (!modes_link->ml_modes)
+	    modes_link->ml_modes = xf86findModes (modes_link->ml_modes_str, 
+						  xf86configptr->conf_modes_lst);
+	if (modes_link->ml_modes)
+	    modes = xf86ModesAdd (modes,
+				  nvxf86GetConfigModes (modes_link->ml_modes->mon_modeline_lst));
+    }
+
+    return xf86ModesAdd (modes,
+			 nvxf86GetConfigModes (conf_monitor->mon_modeline_lst));
+}
+
+/**
+ * Build a mode list containing all of the default modes
+ */
+DisplayModePtr
+nvxf86GetDefaultModes (Bool interlaceAllowed, Bool doubleScanAllowed)
+{
+    DisplayModePtr  head = NULL, prev = NULL, mode;
+    int		    i;
+
+    for (i = 0; xf86DefaultModes[i].name != NULL; i++)
+    {
+	DisplayModePtr	defMode = &xf86DefaultModes[i];
+	
+	if (!interlaceAllowed && (defMode->Flags & V_INTERLACE))
+	    continue;
+	if (!doubleScanAllowed && (defMode->Flags & V_DBLSCAN))
+	    continue;
+
+	mode = xalloc(sizeof(DisplayModeRec));
+	if (!mode)
+	    continue;
+        memcpy(mode,&xf86DefaultModes[i],sizeof(DisplayModeRec));
+        mode->name = xstrdup(xf86DefaultModes[i].name);
+        if (!mode->name)
+	{
+	    xfree (mode);
+	    continue;
+	}
+        mode->prev = prev;
+	mode->next = NULL;
+	if (prev)
+	    prev->next = mode;
+	else
+	    head = mode;
+	prev = mode;
+    }
+    return head;
 }

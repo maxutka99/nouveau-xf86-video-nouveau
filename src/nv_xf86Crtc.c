@@ -718,7 +718,7 @@ xf86PruneDuplicateMonitorModes (MonPtr Monitor)
 /** Return - 0 + if a should be earlier, same or later than b in list
  */
 static int
-i830xf86ModeCompare (DisplayModePtr a, DisplayModePtr b)
+nvxf86ModeCompare (DisplayModePtr a, DisplayModePtr b)
 {
     int	diff;
 
@@ -736,7 +736,7 @@ i830xf86ModeCompare (DisplayModePtr a, DisplayModePtr b)
  * Insertion sort input in-place and return the resulting head
  */
 static DisplayModePtr
-i830xf86SortModes (DisplayModePtr input)
+nvxf86SortModes (DisplayModePtr input)
 {
     DisplayModePtr  output = NULL, i, o, n, *op, prev;
 
@@ -746,7 +746,7 @@ i830xf86SortModes (DisplayModePtr input)
 	i = input;
 	input = input->next;
 	for (op = &output; (o = *op); op = &o->next)
-	    if (i830xf86ModeCompare (o, i) > 0)
+	    if (nvxf86ModeCompare (o, i) > 0)
 		break;
 	i->next = *op;
 	*op = i;
@@ -834,7 +834,7 @@ xf86ProbeOutputModes (ScrnInfoPtr pScrn, int maxX, int maxY)
 		mon_rec.nVrefresh++;
 		sync_source = sync_config;
 	    }
-	    config_modes = i830xf86GetMonitorModes (pScrn, conf_monitor);
+	    config_modes = nvxf86GetMonitorModes (pScrn, conf_monitor);
 	}
 	
 	output_modes = (*output->funcs->get_modes) (output);
@@ -898,7 +898,7 @@ xf86ProbeOutputModes (ScrnInfoPtr pScrn, int maxX, int maxY)
 	    mon_rec.vrefresh[0].hi = 62.0;
 	    mon_rec.nVrefresh = 1;
 	}
-	default_modes = i830xf86GetDefaultModes (output->interlaceAllowed,
+	default_modes = nvxf86GetDefaultModes (output->interlaceAllowed,
 						 output->doubleScanAllowed);
 	
 	if (sync_source == sync_config)
@@ -906,18 +906,18 @@ xf86ProbeOutputModes (ScrnInfoPtr pScrn, int maxX, int maxY)
 	    /* 
 	     * Check output and config modes against sync range from config file
 	     */
-	    i830xf86ValidateModesSync (pScrn, output_modes, &mon_rec);
-	    i830xf86ValidateModesSync (pScrn, config_modes, &mon_rec);
+	    nvxf86ValidateModesSync (pScrn, output_modes, &mon_rec);
+	    nvxf86ValidateModesSync (pScrn, config_modes, &mon_rec);
 	}
 	/*
 	 * Check default modes against sync range
 	 */
-        i830xf86ValidateModesSync (pScrn, default_modes, &mon_rec);
+        nvxf86ValidateModesSync (pScrn, default_modes, &mon_rec);
 	/*
 	 * Check default modes against monitor max clock
 	 */
 	if (max_clock)
-	    i830xf86ValidateModesClocks(pScrn, default_modes,
+	    nvxf86ValidateModesClocks(pScrn, default_modes,
 					&min_clock, &max_clock, 1);
 	
 	output->probed_modes = NULL;
@@ -929,7 +929,7 @@ xf86ProbeOutputModes (ScrnInfoPtr pScrn, int maxX, int maxY)
 	 * Check all modes against max size
 	 */
 	if (maxX && maxY)
-	    i830xf86ValidateModesSize (pScrn, output->probed_modes,
+	    nvxf86ValidateModesSize (pScrn, output->probed_modes,
 				       maxX, maxY, 0);
 	 
 	/*
@@ -939,9 +939,9 @@ xf86ProbeOutputModes (ScrnInfoPtr pScrn, int maxX, int maxY)
 	    if (mode->status == MODE_OK)
 		mode->status = (*output->funcs->mode_valid)(output, mode);
 	
-	i830xf86PruneInvalidModes(pScrn, &output->probed_modes, TRUE);
+	nvxf86PruneInvalidModes(pScrn, &output->probed_modes, TRUE);
 	
-	output->probed_modes = i830xf86SortModes (output->probed_modes);
+	output->probed_modes = nvxf86SortModes (output->probed_modes);
 	
 	/* Check for a configured preference for a particular mode */
 	preferred_mode = xf86GetOptValString (output->options,
@@ -1287,7 +1287,7 @@ xf86OutputSetEDIDProperty (xf86OutputPtr output, void *data, int data_len)
  * Set the EDID information for the specified output
  */
 void
-i830_xf86OutputSetEDID (xf86OutputPtr output, xf86MonPtr edid_mon)
+nv_xf86OutputSetEDID (xf86OutputPtr output, xf86MonPtr edid_mon)
 {
     ScrnInfoPtr		pScrn = output->scrn;
     xf86CrtcConfigPtr	config = XF86_CRTC_CONFIG_PTR(pScrn);
@@ -1351,7 +1351,7 @@ i830_xf86OutputSetEDID (xf86OutputPtr output, xf86MonPtr edid_mon)
  * stored in 'output'
  */
 DisplayModePtr
-i830_xf86OutputGetEDIDModes (xf86OutputPtr output)
+nv_xf86OutputGetEDIDModes (xf86OutputPtr output)
 {
     ScrnInfoPtr	pScrn = output->scrn;
     xf86MonPtr	edid_mon = output->MonInfo;
@@ -1362,7 +1362,7 @@ i830_xf86OutputGetEDIDModes (xf86OutputPtr output)
 }
 
 xf86MonPtr
-i830_xf86OutputGetEDID (xf86OutputPtr output, I2CBusPtr pDDCBus)
+nv_xf86OutputGetEDID (xf86OutputPtr output, I2CBusPtr pDDCBus)
 {
     ScrnInfoPtr	pScrn = output->scrn;
 

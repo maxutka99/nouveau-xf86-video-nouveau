@@ -502,33 +502,18 @@ nv_output_get_modes(xf86OutputPtr output)
     int i;
 
 
-    ddc_mon = xf86DoEDID_DDC2(pScrn->scrnIndex, nv_output->pDDCBus);
+    ddc_mon = nv_xf86OutputGetEDID(output, nv_output->pDDCBus);
     if (ddc_mon == NULL) {
-#ifdef RANDR_12_INTERFACE
-	nv_ddc_set_edid_property(output, NULL, 0);
-#endif
+	nv_xf86OutputSetEDID(output, ddc_mon);
 	return NULL;
     }
-	  
-    if (output->MonInfo != NULL)
-	xfree(output->MonInfo);
-    output->MonInfo = ddc_mon;
 
+    ddc_modes = nv_xf86OutputGetEDIDModes (output);	  
     /* check if a CRT or DFP */
     if (ddc_mon->features.input_type)
 	nv_output->mon_type = MT_DFP;
     else
 	nv_output->mon_type = MT_CRT;
-
-#ifdef RANDR_12_INTERFACE
-    if (output->MonInfo->ver.version == 1) {
-	nv_ddc_set_edid_property(output, ddc_mon->rawData, 128);
-    } else if (output->MonInfo->ver.version == 2) {
-	nv_ddc_set_edid_property(output, ddc_mon->rawData, 256);
-    } else {
-	nv_ddc_set_edid_property(output, NULL, 0);
-    }
-#endif
 
     if (nv_output->mon_type == MT_DFP) {
 	nv_output->fpWidth = NVReadRAMDAC(output, NV_RAMDAC_FP_HDISP_END) + 1;
@@ -538,34 +523,6 @@ nv_output_get_modes(xf86OutputPtr output)
 		   nv_output->fpWidth, nv_output->fpHeight);
 
     }
-
-    /* Debug info for now, at least */
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "EDID for output %s\n", output->name);
-    xf86PrintEDID(output->MonInfo);
-	  
-    ddc_modes = xf86DDCGetModes(pScrn->scrnIndex, ddc_mon);
-	  
-    /* Strip out any modes that can't be supported on this output. */
-    for (mode = ddc_modes; mode != NULL; mode = mode->next) {
-	int status = (*output->funcs->mode_valid)(output, mode);
-	    
-	if (status != MODE_OK)
-	    mode->status = status;
-    }
-    i830xf86PruneInvalidModes(pScrn, &ddc_modes, TRUE);
-	  
-    /* Pull out a phyiscal size from a detailed timing if available. */
-    for (i = 0; i < 4; i++) {
-	if (ddc_mon->det_mon[i].type == DT &&
-	    ddc_mon->det_mon[i].section.d_timings.h_size != 0 &&
-	    ddc_mon->det_mon[i].section.d_timings.v_size != 0)
-	{
-	    output->mm_width = ddc_mon->det_mon[i].section.d_timings.h_size;
-	    output->mm_height = ddc_mon->det_mon[i].section.d_timings.v_size;
-	    break;
-	}
-    }
-	  
     return ddc_modes;
 
 }
