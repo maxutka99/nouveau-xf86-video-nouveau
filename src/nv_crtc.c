@@ -378,11 +378,6 @@ void nv_crtc_calc_state_ext(
     regp = &pNv->ModeReg.crtc_reg[nv_crtc->crtc];
 
     /*
-     * Save mode parameters.
-     */
-    regp->width  = width;
-    regp->height = height;
-    /*
      * Extended RIVA registers.
      */
     pixelDepth = (bpp + 1)/8;
@@ -625,7 +620,7 @@ nv_crtc_mode_set_vga(xf86CrtcPtr crtc, DisplayModePtr mode)
     regp->CRTC[16] = mode->CrtcVSyncStart & 0xFF;
     regp->CRTC[17] = (mode->CrtcVSyncEnd & 0x0F) | 0x20;
     regp->CRTC[18] = (mode->CrtcVDisplay - 1) & 0xFF;
-    regp->CRTC[19] = pScrn->displayWidth >> 4;  /* just a guess */
+    regp->CRTC[19] = mode->CrtcHDisplay >> 4;  /* just a guess */
     regp->CRTC[20] = 0x00;
     regp->CRTC[21] = (mode->CrtcVBlankStart - 1) & 0xFF; 
     regp->CRTC[22] = (mode->CrtcVBlankEnd - 1) & 0xFF;
@@ -866,6 +861,7 @@ nv_crtc_mode_set_regs(xf86CrtcPtr crtc, DisplayModePtr mode)
     if(pNv->Architecture >= NV_ARCH_10)
 	pNv->CURSOR = (CARD32 *)pNv->Cursor->map;
 
+    ErrorF("crtc %d %d %d\n", nv_crtc->crtc, mode->CrtcHDisplay, pLayout->displayWidth);
     nv_crtc_calc_state_ext(crtc,
 			   i,
 			   pLayout->displayWidth,

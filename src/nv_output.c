@@ -120,6 +120,10 @@ static void
 nv_output_dpms(xf86OutputPtr output, int mode)
 {
     NVOutputPrivatePtr nv_output = output->driver_private;
+    xf86CrtcPtr crtc = output->crtc;
+    ScrnInfoPtr pScrn = output->scrn;
+    NVPtr pNv = NVPTR(pScrn);
+    NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
 
     if (nv_output->type == OUTPUT_LVDS) {
 	switch(mode) {
@@ -138,7 +142,7 @@ nv_output_dpms(xf86OutputPtr output, int mode)
     if (nv_output->type == OUTPUT_DVI) {
 	CARD32 fpcontrol;
 
-	fpcontrol = NVOutputReadRAMDAC(output, NV_RAMDAC_FP_CONTROL) & 0xCfffffCC;	
+	fpcontrol = nvReadRAMDAC(pNv, nv_crtc->crtc, NV_RAMDAC_FP_CONTROL) & 0xCfffffCC;	
 	switch(mode) {
 	case DPMSModeStandby:
 	case DPMSModeSuspend:
@@ -150,7 +154,7 @@ nv_output_dpms(xf86OutputPtr output, int mode)
 	    fpcontrol |= nv_output->fpSyncs;
 	}
 	
-	NVOutputWriteRAMDAC(output, NV_RAMDAC_FP_CONTROL, fpcontrol);
+	nvWriteRAMDAC(pNv, nv_crtc->crtc, NV_RAMDAC_FP_CONTROL, fpcontrol);
     }
 
 }
@@ -184,7 +188,7 @@ void nv_output_save_state_ext(xf86OutputPtr output, RIVA_HW_STATE *state)
     } else if(pNv->twoHeads) {
 	regp->dither = NVOutputReadRAMDAC(output, NV_RAMDAC_FP_DITHER);
     }
-    regp->crtcSync = NVOutputReadRAMDAC(output, NV_RAMDAC_FP_HCRTC);
+    //    regp->crtcSync = NVOutputReadRAMDAC(output, NV_RAMDAC_FP_HCRTC);
     regp->nv10_cursync = NVOutputReadRAMDAC(output, NV_RAMDAC_NV10_CURSYNC);
 }
 
@@ -200,7 +204,7 @@ void nv_output_load_state_ext(xf86OutputPtr output, RIVA_HW_STATE *state)
     NVOutputWriteRAMDAC(output, NV_RAMDAC_FP_DEBUG_0, regp->debug_0);
     NVOutputWriteRAMDAC(output, NV_RAMDAC_OUTPUT, regp->output);
     NVOutputWriteRAMDAC(output, NV_RAMDAC_FP_CONTROL, regp->fp_control);
-    NVOutputWriteRAMDAC(output, NV_RAMDAC_FP_HCRTC, regp->crtcSync);
+    //    NVOutputWriteRAMDAC(output, NV_RAMDAC_FP_HCRTC, regp->crtcSync);
   
     nvWriteRAMDAC0(pNv, NV_RAMDAC_PLL_SELECT, state->pllsel);
 
@@ -396,7 +400,7 @@ nv_output_mode_set_regs(xf86OutputPtr output, DisplayModePtr mode)
 	else
 		regp->output = 0x1;
 
-	if (nv_crtc->crtc == 0 && nv_output->ramdac == 1 && two_mon) {
+	if (nv_crtc->crtc == 1 && nv_output->ramdac == 0 && two_mon) {
 	    state->vpll2 = state->pll;
 	    state->vpll2B = state->pllB;
 	    state->pllsel |= (1<<29) | (1<<11);
@@ -406,7 +410,7 @@ nv_output_mode_set_regs(xf86OutputPtr output, DisplayModePtr mode)
 	    state->vpllB = state->pllB;
 	}
 
-	ErrorF("crtc %d output%d: %04X: twocrt %d twomon %d\n", nv_crtc->crtc, nv_output->ramdac, regp->output, two_crt, two_mon);
+	ErrorF("%d: crtc %d output%d: %04X: twocrt %d twomon %d\n", is_fp, nv_crtc->crtc, nv_output->ramdac, regp->output, two_crt, two_mon);
     }
 }
 

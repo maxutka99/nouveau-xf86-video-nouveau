@@ -109,8 +109,6 @@ typedef struct _nv_crtc_reg
     unsigned char DAC[768];       /* Internal Colorlookuptable */
     CARD32 cursorConfig;
     CARD32 crtcOwner;
-    CARD32 width;
-    CARD32 height;
     CARD32 unk830;
     CARD32 unk834;
     CARD32 head;
