@@ -748,6 +748,12 @@ nv_crtc_mode_set_regs(xf86CrtcPtr crtc, DisplayModePtr mode)
     if(mode->Flags & V_INTERLACE) 
         vertTotal |= 1;
 
+    for (i = 0; i < 7; i++) {
+      regp->fp_horiz_regs[i] = savep->fp_horiz_regs[i];
+      regp->fp_vert_regs[i] = savep->fp_vert_regs[i];
+    }
+
+     
     if(is_fp == 1) {
        vertStart = vertTotal - 3;  
        vertEnd = vertTotal - 2;
