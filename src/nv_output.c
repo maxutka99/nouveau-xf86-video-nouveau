@@ -409,16 +409,19 @@ nv_output_mode_set_regs(xf86OutputPtr output, DisplayModePtr mode)
 
 	if (is_fp == TRUE)
 	    regp->output = 0x0;
-	else if (nv_crtc->crtc == 0 && nv_output->ramdac == 1 && (two_crt == TRUE)) {
+
+	if (nv_crtc->crtc == 0 && nv_output->ramdac == 1 && (two_crt == TRUE)) {
 	    state->vpll2 = state->pll;
 	    state->vpll2B = state->pllB;
-	    regp->output = 0x101;
-		state->pllsel |= (1<<29) | (1<<11);
+	    state->pllsel |= (1<<29) | (1<<11);
+            if (!is_fp)
+	    	regp->output = 0x101;
 	}
 	else {
 	    state->vpll = state->pll;
 	    state->vpllB = state->pllB;
-	    regp->output = 0x1;
+            if (!is_fp)
+	    	regp->output = 0x1;
 	}
 
 	ErrorF("output%d: %04X: twomon %d\n", nv_output->ramdac, regp->output, two_crt);
