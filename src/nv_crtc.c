@@ -997,12 +997,26 @@ void nv_crtc_restore(xf86CrtcPtr crtc)
 
 }
 
+void nv_crtc_prepare(xf86CrtcPtr crtc)
+{
+
+
+}
+
+void nv_crtc_commit(xf86CrtcPtr crtc)
+{
+
+
+}
+
 static const xf86CrtcFuncsRec nv_crtc_funcs = {
     .dpms = nv_crtc_dpms,
     .save = nv_crtc_save, /* XXX */
     .restore = nv_crtc_restore, /* XXX */
     .mode_fixup = nv_crtc_mode_fixup,
     .mode_set = nv_crtc_mode_set,
+    .prepare = nv_crtc_prepare,
+    .commit = nv_crtc_commit,
     .destroy = NULL, /* XXX */
 };
 

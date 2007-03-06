@@ -1111,6 +1111,18 @@ static Bool NVPreInitDRI(ScrnInfoPtr pScrn)
 	return TRUE;
 }
 
+static Bool
+nv_xf86crtc_resize (ScrnInfoPtr scrn, int width, int height)
+{
+    scrn->virtualX = width;
+    scrn->virtualY = height;
+    return TRUE;
+}
+
+static const xf86CrtcConfigFuncsRec nv_xf86crtc_config_funcs = {
+    nv_xf86crtc_resize
+};
+
 /* Mandatory */
 Bool
 NVPreInit(ScrnInfoPtr pScrn, int flags)
@@ -1581,7 +1593,7 @@ NVPreInit(ScrnInfoPtr pScrn, int flags)
 
 
     /* Allocate an xf86CrtcConfig */
-    xf86CrtcConfigInit (pScrn);
+    xf86CrtcConfigInit (pScrn, &nv_xf86crtc_config_funcs);
     xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
     
     max_width = 16384;
@@ -1612,7 +1624,7 @@ NVPreInit(ScrnInfoPtr pScrn, int flags)
       output->status = (*output->funcs->detect) (output);
     }
     
-    if (!xf86InitialConfiguration (pScrn)) {
+    if (!xf86InitialConfiguration (pScrn, FALSE)) {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "No valid modes.\n");
 	return FALSE;
     }    

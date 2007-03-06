@@ -34,8 +34,6 @@
 #include "xf86.h"
 #include "xf86Priv.h"
 #include "xf86DDC.h"
-#include "X11/Xatom.h"
-
 #include "mipointer.h"
 #include "windowstr.h"
 #include <randrstr.h>
@@ -97,6 +95,7 @@ xf86RandR12GetInfo (ScreenPtr pScreen, Rotation *rotations)
     /* Re-probe the outputs for new monitors or modes */
     xf86ProbeOutputModes (scrp, 0, 0);
     xf86SetScrnInfoModes (scrp);
+    xf86DiDGAReInit (pScreen);
 
     for (mode = scrp->modes; ; mode = mode->next)
     {
@@ -333,8 +332,9 @@ xf86RandR12ScreenSetSize (ScreenPtr	pScreen,
 {
     XF86RandRInfoPtr	randrp = XF86RANDRINFO(pScreen);
     ScrnInfoPtr		pScrn = XF86SCRNINFO(pScreen);
+    xf86CrtcConfigPtr	config = XF86_CRTC_CONFIG_PTR(pScrn);
     WindowPtr		pRoot = WindowTable[pScreen->myNum];
-    Bool 		ret = TRUE;
+    Bool		ret = FALSE;
 
     if (randrp->virtualX == -1 || randrp->virtualY == -1)
     {
@@ -343,20 +343,26 @@ xf86RandR12ScreenSetSize (ScreenPtr	pScreen,
     }
     if (pRoot)
 	(*pScrn->EnableDisableFBAccess) (pScreen->myNum, FALSE);
-    pScrn->virtualX = width;
-    pScrn->virtualY = height;
 
-    pScreen->width = pScrn->virtualX;
-    pScreen->height = pScrn->virtualY;
+    /* Let the driver update virtualX and virtualY */
+    if (!(*config->funcs->resize)(pScrn, width, height))
+	goto finish;
+
+    ret = TRUE;
+
+    pScreen->width = width;
+    pScreen->height = height;
     pScreen->mmWidth = mmWidth;
     pScreen->mmHeight = mmHeight;
 
     xf86SetViewport (pScreen, pScreen->width-1, pScreen->height-1);
     xf86SetViewport (pScreen, 0, 0);
+
+finish:
     if (pRoot)
 	(*pScrn->EnableDisableFBAccess) (pScreen->myNum, TRUE);
 #if RANDR_12_INTERFACE
-    if (WindowTable[pScreen->myNum])
+    if (WindowTable[pScreen->myNum] && ret)
 	RRScreenSizeNotify (pScreen);
 #endif
     return ret;
@@ -392,8 +398,8 @@ xf86RandR12CreateScreenResources (ScreenPtr pScreen)
     for (c = 0; c < config->num_crtc; c++)
     {
 	xf86CrtcPtr crtc = config->crtc[c];
-	int	    crtc_width = crtc->x + crtc->mode.HDisplay;
-	int	    crtc_height = crtc->y + crtc->mode.VDisplay;
+	int	    crtc_width = crtc->x + xf86ModeWidth (&crtc->mode, crtc->rotation);
+	int	    crtc_height = crtc->y + xf86ModeHeight (&crtc->mode, crtc->rotation);
 	
 	if (crtc->enabled && crtc_width > width)
 	    width = crtc_width;
@@ -413,8 +419,28 @@ xf86RandR12CreateScreenResources (ScreenPtr pScreen)
 	}
 	else
 	{
-	    mmWidth = pScreen->mmWidth;
-	    mmHeight = pScreen->mmHeight;
+	    xf86OutputPtr   output = config->output[config->compat_output];
+	    xf86CrtcPtr	    crtc = output->crtc;
+
+	    if (crtc && crtc->mode.HDisplay &&
+		output->mm_width && output->mm_height)
+	    {
+		/*
+		 * If the output has a mode and a declared size, use that
+		 * to scale the screen size
+		 */
+		DisplayModePtr	mode = &crtc->mode;
+		mmWidth = output->mm_width * width / mode->HDisplay;
+		mmHeight = output->mm_height * height / mode->VDisplay;
+	    }
+	    else
+	    {
+		/*
+		 * Otherwise, just set the screen to 96dpi
+		 */
+		mmWidth = width * 25.4 / 96;
+		mmHeight = height * 25.4 / 96;
+	    }
 	}
 	xf86DrvMsg(pScrn->scrnIndex, X_INFO,
 		   "Setting screen physical size to %d x %d\n",
@@ -431,6 +457,7 @@ xf86RandR12CreateScreenResources (ScreenPtr pScreen)
 	randrp->virtualX = pScrn->virtualX;
 	randrp->virtualY = pScrn->virtualY;
     }
+    xf86CrtcSetScreenSubpixelOrder (pScreen);
 #if RANDR_12_INTERFACE
     if (xf86RandR12CreateScreenResources12 (pScreen))
 	return TRUE;
@@ -493,19 +520,18 @@ void
 xf86RandR12SetRotations (ScreenPtr pScreen, Rotation rotations)
 {
     XF86RandRInfoPtr	randrp = XF86RANDRINFO(pScreen);
-    ScrnInfoPtr		pScrn = xf86Screens[pScreen->myNum];
-    xf86CrtcConfigPtr   config = XF86_CRTC_CONFIG_PTR(pScrn);
-    int			c;
-
-    randrp->supported_rotations = rotations;
-
 #if RANDR_12_INTERFACE
+    ScrnInfoPtr		pScrn = xf86Screens[pScreen->myNum];
+    int			c;
+    xf86CrtcConfigPtr   config = XF86_CRTC_CONFIG_PTR(pScrn);
+
     for (c = 0; c < config->num_crtc; c++) {
 	xf86CrtcPtr    crtc = config->crtc[c];
 
 	RRCrtcSetRotations (crtc->randr_crtc, rotations);
     }
 #endif
+    randrp->supported_rotations = rotations;
 }
 
 void
@@ -862,6 +888,7 @@ xf86RandR12GetInfo12 (ScreenPtr pScreen, Rotation *rotations)
 
     xf86ProbeOutputModes (pScrn, 0, 0);
     xf86SetScrnInfoModes (pScrn);
+    xf86DiDGAReInit (pScreen);
     return xf86RandR12SetInfo12 (pScreen);
 }
 
@@ -910,15 +937,14 @@ xf86RandR12CreateScreenResources12 (ScreenPtr pScreen)
 {
     int			c;
     ScrnInfoPtr		pScrn = xf86Screens[pScreen->myNum];
-    XF86RandRInfoPtr	randrp = XF86RANDRINFO(pScreen);
     xf86CrtcConfigPtr   config = XF86_CRTC_CONFIG_PTR(pScrn);
 
     for (c = 0; c < config->num_crtc; c++)
 	xf86RandR12CrtcNotify (config->crtc[c]->randr_crtc);
     
     
-    RRScreenSetSizeRange (pScreen, 320, 240,
-			  randrp->virtualX, randrp->virtualY);
+    RRScreenSetSizeRange (pScreen, config->minWidth, config->minHeight,
+			  config->maxWidth, config->maxHeight);
     return TRUE;
 }
 

@@ -531,6 +531,19 @@ nv_output_destroy (xf86OutputPtr output)
 
 }
 
+static void
+nv_output_prepare(xf86OutputPtr output)
+{
+
+}
+
+static void
+nv_output_commit(xf86OutputPtr output)
+{
+
+
+}
+
 static const xf86OutputFuncsRec nv_output_funcs = {
     .dpms = nv_output_dpms,
     .save = nv_output_save,
@@ -540,7 +553,9 @@ static const xf86OutputFuncsRec nv_output_funcs = {
     .mode_set = nv_output_mode_set,
     .detect = nv_output_detect,
     .get_modes = nv_output_get_modes,
-    .destroy = nv_output_destroy
+    .destroy = nv_output_destroy,
+    .prepare = nv_output_prepare,
+    .commit = nv_output_commit,
 };
 
 static xf86OutputStatus
@@ -574,7 +589,9 @@ static const xf86OutputFuncsRec nv_lvds_output_funcs = {
     .mode_set = nv_output_mode_set,
     .detect = nv_output_lvds_detect,
     .get_modes = nv_output_lvds_get_modes,
-    .destroy = nv_output_destroy
+    .destroy = nv_output_destroy,
+    .prepare = nv_output_prepare,
+    .commit = nv_output_commit,
 };
 
 /**

@@ -39,6 +39,20 @@
 typedef struct _xf86Crtc xf86CrtcRec, *xf86CrtcPtr;
 typedef struct _xf86Output xf86OutputRec, *xf86OutputPtr;
 
+/* define a standard for connector types */
+typedef enum _xf86ConnectorType {
+   XF86ConnectorNone,
+   XF86ConnectorVGA,
+   XF86ConnectorDVI_I,
+   XF86ConnectorDVI_D,
+   XF86ConnectorDVI_A,
+   XF86ConnectorComposite,
+   XF86ConnectorSvideo,
+   XF86ConnectorComponent,
+   XF86ConnectorLFP,
+   XF86ConnectorProprietary,
+} xf86ConnectorType;
+
 typedef enum _xf86OutputStatus {
    XF86OutputStatusConnected,
    XF86OutputStatusDisconnected,
@@ -95,6 +109,12 @@ typedef struct _xf86CrtcFuncs {
 		  DisplayModePtr adjusted_mode);
 
     /**
+     * Prepare CRTC for an upcoming mode set.
+     */
+    void
+    (*prepare)(xf86CrtcPtr crtc);
+
+    /**
      * Callback for setting up a video mode after fixups have been made.
      */
     void
@@ -103,22 +123,34 @@ typedef struct _xf86CrtcFuncs {
 		DisplayModePtr adjusted_mode,
 		int x, int y);
 
+    /**
+     * Commit mode changes to a CRTC
+     */
+    void
+    (*commit)(xf86CrtcPtr crtc);
+
     /* Set the color ramps for the CRTC to the given values. */
     void
     (*gamma_set)(xf86CrtcPtr crtc, CARD16 *red, CARD16 *green, CARD16 *blue,
 		 int size);
 
     /**
+     * Allocate the shadow area, delay the pixmap creation until needed
+     */
+    void *
+    (*shadow_allocate) (xf86CrtcPtr crtc, int width, int height);
+    
+    /**
      * Create shadow pixmap for rotation support
      */
     PixmapPtr
-    (*shadow_create) (xf86CrtcPtr crtc, int width, int height);
+    (*shadow_create) (xf86CrtcPtr crtc, void *data, int width, int height);
     
     /**
      * Destroy shadow pixmap
      */
     void
-    (*shadow_destroy) (xf86CrtcPtr crtc, PixmapPtr pPixmap);
+    (*shadow_destroy) (xf86CrtcPtr crtc, PixmapPtr pPixmap, void *data);
 
     /**
      * Clean up driver-specific bits of the crtc
@@ -156,6 +188,8 @@ struct _xf86Crtc {
     DisplayModeRec  mode;
     Rotation	    rotation;
     PixmapPtr	    rotatedPixmap;
+    void	    *rotatedData;
+    
     /**
      * Position on screen
      *
@@ -252,6 +286,18 @@ typedef struct _xf86OutputFuncs {
     (*mode_fixup)(xf86OutputPtr output,
 		  DisplayModePtr mode,
 		  DisplayModePtr adjusted_mode);
+
+    /**
+     * Callback for preparing mode changes on an output
+     */
+    void
+    (*prepare)(xf86OutputPtr output);
+
+    /**
+     * Callback for committing mode changes on an output
+     */
+    void
+    (*commit)(xf86OutputPtr output);
 
     /**
      * Callback for setting up a video mode after fixups have been made.
@@ -354,6 +400,11 @@ struct _xf86Output {
     int			initial_x, initial_y;
 
     /**
+     * Desired initial rotation
+     */
+    Rotation		initial_rotation;
+
+    /**
      * Current connection status
      *
      * This indicates whether a monitor is known to be connected
@@ -392,6 +443,25 @@ struct _xf86Output {
 #endif
 };
 
+typedef struct _xf86CrtcConfigFuncs {
+    /**
+     * Requests that the driver resize the screen.
+     *
+     * The driver is responsible for updating scrn->virtualX and scrn->virtualY.
+     * If the requested size cannot be set, the driver should leave those values
+     * alone and return FALSE.
+     *
+     * A naive driver that cannot reallocate the screen may simply change
+     * virtual[XY].  A more advanced driver will want to also change the
+     * devPrivate.ptr and devKind of the screen pixmap, update any offscreen
+     * pixmaps it may have moved, and change pScrn->displayWidth.
+     */
+    Bool
+    (*resize)(ScrnInfoPtr	scrn,
+	      int		width,
+	      int		height);
+} xf86CrtcConfigFuncsRec, *xf86CrtcConfigFuncsPtr;
+
 typedef struct _xf86CrtcConfig {
     int			num_output;
     xf86OutputPtr	*output;
@@ -413,7 +483,14 @@ typedef struct _xf86CrtcConfig {
     DamagePtr   rotationDamage;
 
     /* DGA */
-    unsigned int dga_flags;
+    unsigned int	dga_flags;
+    unsigned long	dga_address;
+    DGAModePtr		dga_modes;
+    int			dga_nmode;
+    int			dga_width, dga_height, dga_stride;
+    DisplayModePtr	dga_save_mode;
+
+    const xf86CrtcConfigFuncsRec *funcs;
 
 } xf86CrtcConfigRec, *xf86CrtcConfigPtr;
 
@@ -426,7 +503,8 @@ extern int xf86CrtcConfigPrivateIndex;
  */
 
 void
-xf86CrtcConfigInit (ScrnInfoPtr		scrn);
+xf86CrtcConfigInit (ScrnInfoPtr				scrn,
+		    const xf86CrtcConfigFuncsRec	*funcs);
 
 void
 xf86CrtcSetSizeRange (ScrnInfoPtr scrn,
@@ -503,7 +581,7 @@ void
 xf86SetScrnInfoModes (ScrnInfoPtr pScrn);
 
 Bool
-xf86InitialConfiguration (ScrnInfoPtr pScrn);
+xf86InitialConfiguration (ScrnInfoPtr pScrn, Bool canGrow);
 
 void
 xf86DPMSSet(ScrnInfoPtr pScrn, int PowerManagementMode, int flags);
@@ -513,6 +591,12 @@ xf86SaveScreen(ScreenPtr pScreen, int mode);
 
 void
 xf86DisableUnusedFunctions(ScrnInfoPtr pScrn);
+
+DisplayModePtr
+xf86OutputFindClosestMode (xf86OutputPtr output, DisplayModePtr desired);
+    
+Bool
+xf86SetSingleMode (ScrnInfoPtr pScrn, DisplayModePtr desired, Rotation rotation);
 
 /**
  * Set the EDID information for the specified output
@@ -529,5 +613,41 @@ xf86OutputGetEDIDModes (xf86OutputPtr output);
 
 xf86MonPtr
 xf86OutputGetEDID (xf86OutputPtr output, I2CBusPtr pDDCBus);
+
+/**
+ * Initialize dga for this screen
+ */
+
+Bool
+xf86DiDGAInit (ScreenPtr pScreen, unsigned long dga_address);
+
+/**
+ * Re-initialize dga for this screen (as when the set of modes changes)
+ */
+
+Bool
+xf86DiDGAReInit (ScreenPtr pScreen);
+
+/*
+ * Set the subpixel order reported for the screen using
+ * the information from the outputs
+ */
+
+void
+xf86CrtcSetScreenSubpixelOrder (ScreenPtr pScreen);
+
+/*
+ * Get a standard string name for a connector type 
+ */
+char *
+xf86ConnectorGetName(xf86ConnectorType connector);
+
+/*
+ * Using the desired mode information in each crtc, set
+ * modes (used in EnterVT functions, or at server startup)
+ */
+
+Bool
+xf86SetDesiredModes (ScrnInfoPtr pScrn);
 
 #endif /* _XF86CRTC_H_ */
