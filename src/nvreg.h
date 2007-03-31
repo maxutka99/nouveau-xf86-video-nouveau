@@ -224,6 +224,7 @@
 #define NV_RAMDAC_FP_CHECKSUM       0x840
 #define NV_RAMDAC_FP_TEST_CONTROL   0x844
 #define NV_RAMDAC_FP_CONTROL        0x848
+#define NV_RAMDAC_FP_CONTROL_ENABLE (1<<28) // toggling this bit turns things on/off
 
 #define NV_RAMDAC_FP_DEBUG_0        0x880
 #define NV_RAMDAC_FP_DEBUG_0_PWRDOWN_FPCLK (1<<28)
