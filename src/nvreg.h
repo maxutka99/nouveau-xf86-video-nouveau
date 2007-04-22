@@ -120,6 +120,7 @@
 #define NV_VGA_CRTCX_FIFO_LWM_NV30	0x47
 #define NV_VGA_CRTCX_FP_HTIMING		0x53
 #define NV_VGA_CRTCX_FP_VTIMING		0x54
+#define NV_VGA_CRTCX_59                 0x59
 
 #define NV_PGRAPH_STATUS            (0x00000700)
 #define NV_PFIFO_RAMHT              (0x00000210)
