@@ -910,10 +910,6 @@ NVEnterVT(int scrnIndex, int flags)
 	NVSave(pScrn);
     }
     
-    NVInitTimer(pScrn);
-    NVInitSurface(pScrn, &pNv->SavedReg);
-    NVInitGraphContext(pScrn);
-
     pScrn->vtSema = TRUE;
     
     NVResetCrtcConfig(pScrn, 0);
