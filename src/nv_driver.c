@@ -1003,9 +1003,13 @@ NVCloseScreen(int scrnIndex, ScreenPtr pScreen)
 	NVPtr pNv = NVPTR(pScrn);
 
 	if (pScrn->vtSema) {
-		pScrn->vtSema = FALSE;
-		NVSync(pScrn);
-		NVRestore(pScrn);
+		ErrorF("*************\n");
+		if (pNv->Architecture == NV_ARCH_50) {
+			NV50ReleaseDisplay(pScrn);
+		} else {
+			NVSync(pScrn);
+			NVRestore(pScrn);
+		}
 	}
 
 	NVUnmapMem(pScrn);
@@ -1021,6 +1025,7 @@ NVCloseScreen(int scrnIndex, ScreenPtr pScreen)
 	if (pNv->blitAdaptor)
 		xfree(pNv->blitAdaptor);
 
+	pScrn->vtSema = FALSE;
 	pScreen->CloseScreen = pNv->CloseScreen;
 	pScreen->BlockHandler = pNv->BlockHandler;
 	return (*pScreen->CloseScreen) (scrnIndex, pScreen);
