@@ -611,13 +611,23 @@ Bool NVExaInit(ScreenPtr pScreen)
 	pNv->EXADriverPtr->DownloadFromScreen = NVDownloadFromScreen; 
 	pNv->EXADriverPtr->UploadToScreen = NVUploadToScreen; 
 
-	pNv->EXADriverPtr->PrepareCopy = NVExaPrepareCopy;
-	pNv->EXADriverPtr->Copy = NVExaCopy;
-	pNv->EXADriverPtr->DoneCopy = NVExaDoneCopy;
+	if (pNv->Architecture < NV_ARCH_50) {
+		pNv->EXADriverPtr->PrepareCopy = NVExaPrepareCopy;
+		pNv->EXADriverPtr->Copy = NVExaCopy;
+		pNv->EXADriverPtr->DoneCopy = NVExaDoneCopy;
 
-	pNv->EXADriverPtr->PrepareSolid = NVExaPrepareSolid;
-	pNv->EXADriverPtr->Solid = NVExaSolid;
-	pNv->EXADriverPtr->DoneSolid = NVExaDoneSolid;
+		pNv->EXADriverPtr->PrepareSolid = NVExaPrepareSolid;
+		pNv->EXADriverPtr->Solid = NVExaSolid;
+		pNv->EXADriverPtr->DoneSolid = NVExaDoneSolid;
+	} else {
+		pNv->EXADriverPtr->PrepareCopy = NV50EXAPrepareCopy;
+		pNv->EXADriverPtr->Copy = NV50EXACopy;
+		pNv->EXADriverPtr->DoneCopy = NV50EXADoneCopy;
+
+		pNv->EXADriverPtr->PrepareSolid = NV50EXAPrepareSolid;
+		pNv->EXADriverPtr->Solid = NV50EXASolid;
+		pNv->EXADriverPtr->DoneSolid = NV50EXADoneSolid;
+	}
 
 	switch (pNv->Architecture) {
 	case NV_ARCH_40:
@@ -625,6 +635,8 @@ Bool NVExaInit(ScreenPtr pScreen)
 		pNv->EXADriverPtr->PrepareComposite = NV30EXAPrepareComposite;
 		pNv->EXADriverPtr->Composite        = NV30EXAComposite;
 		pNv->EXADriverPtr->DoneComposite    = NV30EXADoneComposite;
+		break;
+	case NV_ARCH_50:
 		break;
 	default:
 		if (!pNv->BlendingPossible)

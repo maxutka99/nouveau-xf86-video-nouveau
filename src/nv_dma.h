@@ -66,6 +66,7 @@ enum DMAObjects {
 	NvScaledImage		= 0x80000017, 
 	NvMemFormat		= 0x80000018,
 	Nv3D			= 0x80000019,
+	Nv2D			= 0x80000020,
 	NvDmaFB			= 0xD8000001,
 	NvDmaTT			= 0xD8000002,
 	NvDmaNotifier0		= 0xD8000003
@@ -73,6 +74,7 @@ enum DMAObjects {
 
 enum DMASubchannel {
 /* EXA + XAA + Xv */
+	NvSub2D			= 0,
 	NvSubContextSurfaces	= 0, 
 	NvSubRectangle		= 1, 
 	NvSubScaledImage	= 2, 
@@ -103,7 +105,7 @@ enum DMASubchannel {
 } while(0)
 
 #define NVDmaStart(pNv, subchannel, tag, size) do {                     \
-        if((pNv)->dmaFree <= (size))                                    \
+       if((pNv)->dmaFree <= (size))                                     \
             NVDmaWait(pScrn, size);                                     \
         NVDEBUG("NVDmaStart: subc=%d, cmd=%x, num=%d\n", (subchannel), (tag), (size)); \
         NVDmaNext(pNv, ((size) << 18) | ((subchannel) << 13) | (tag));  \

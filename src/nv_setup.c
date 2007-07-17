@@ -357,15 +357,22 @@ NVCommonSetup(ScrnInfoPtr pScrn)
 
     pNv->BlendingPossible = ((pNv->Chipset & 0xffff) > CHIPSET_NV04);
 
-
+    /* Chipset from PMC_BOOT_0 register */
+    if (pNv->Architecture == NV_ARCH_04) {
+	    pNv->_Chipset = 0x04;
+    } else {
+	    pNv->_Chipset = (nvReadMC(pNv, 0) >> 20) & 0xff;
+    }
 
     /* Parse the bios to initialize the card */
     NVSelectHeadRegisters(pScrn, 0);
     NVParseBios(pScrn);
+#if 0
     /* reset PFIFO and PGRAPH, then power up all the card units */
     nvWriteMC(pNv, 0x200, 0x17110013);
     usleep(1000);
     nvWriteMC(pNv, 0x200, 0x17111113);
+#endif
 
     if(pNv->Architecture == NV_ARCH_03)
         nv3GetConfig(pNv);

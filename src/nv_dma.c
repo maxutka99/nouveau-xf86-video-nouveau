@@ -23,43 +23,6 @@ void NVDmaKickoffCallback(NVPtr pNv)
  */
 #define SKIPS  8
 
-void NVDmaWait (ScrnInfoPtr pScrn, int size)
-{
-	NVPtr pNv = NVPTR(pScrn);
-	int t_start;
-	int dmaGet;
-
-	size++;
-
-	t_start = GetTimeInMillis();
-	while(pNv->dmaFree < size) {
-		dmaGet = READ_GET(pNv);
-
-		if(pNv->dmaPut >= dmaGet) {
-			pNv->dmaFree = pNv->dmaMax - pNv->dmaCurrent;
-			if(pNv->dmaFree < size) {
-				NVDmaNext(pNv, (0x20000000|pNv->fifo.put_base));
-				if(dmaGet <= SKIPS) {
-					if(pNv->dmaPut <= SKIPS) /* corner case - will be idle */
-						WRITE_PUT(pNv, SKIPS + 1);
-					do {
-						if (GetTimeInMillis() - t_start > 2000)
-							NVSync(pScrn);
-						dmaGet = READ_GET(pNv);
-					} while(dmaGet <= SKIPS);
-				}
-				WRITE_PUT(pNv, SKIPS);
-				pNv->dmaCurrent = pNv->dmaPut = SKIPS;
-				pNv->dmaFree = dmaGet - (SKIPS + 1);
-			}
-		} else
-			pNv->dmaFree = dmaGet - pNv->dmaCurrent - 1;
-
-		if (GetTimeInMillis() - t_start > 2000)
-			NVSync(pScrn);
-	}
-}
-
 static void NVDumpLockupInfo(NVPtr pNv)
 {
 	int i,start;
@@ -87,10 +50,49 @@ NVLockedUp(ScrnInfoPtr pScrn)
 		   pNv->dmaPut, READ_GET(pNv), pNv->PGRAPH[NV_PGRAPH_STATUS/4]);
 }
 
+void NVDmaWait (ScrnInfoPtr pScrn, int size)
+{
+	NVPtr pNv = NVPTR(pScrn);
+	int t_start;
+	int dmaGet;
+
+	size++;
+
+	t_start = GetTimeInMillis();
+	while(pNv->dmaFree < size) {
+		dmaGet = READ_GET(pNv);
+
+		if(pNv->dmaPut >= dmaGet) {
+			pNv->dmaFree = pNv->dmaMax - pNv->dmaCurrent;
+			if(pNv->dmaFree < size) {
+				NVDmaNext(pNv, (0x20000000|pNv->fifo.put_base));
+				if(dmaGet <= SKIPS) {
+					if(pNv->dmaPut <= SKIPS) /* corner case - will be idle */
+						WRITE_PUT(pNv, SKIPS + 1);
+					do {
+						if (GetTimeInMillis() - t_start > 2000)
+							NVLockedUp(pScrn);
+						dmaGet = READ_GET(pNv);
+					} while(dmaGet <= SKIPS);
+				}
+				WRITE_PUT(pNv, SKIPS);
+				pNv->dmaCurrent = pNv->dmaPut = SKIPS;
+				pNv->dmaFree = dmaGet - (SKIPS + 1);
+			}
+		} else {
+			pNv->dmaFree = dmaGet - pNv->dmaCurrent - 1;
+		}
+
+		if (GetTimeInMillis() - t_start > 2000)
+			NVLockedUp(pScrn);
+	}
+}
+
 void NVSync(ScrnInfoPtr pScrn)
 {
 	NVPtr pNv = NVPTR(pScrn);
 	int t_start, timeout = 2000;
+	int subc;
 
 	if(pNv->NoAccel)
 		return;
@@ -108,10 +110,11 @@ void NVSync(ScrnInfoPtr pScrn)
 	}
 
 	/* Wait for channel to go completely idle */
+	subc = (pNv->Architecture >= NV_ARCH_50) ? NvSub2D : NvSubImageBlit;
 	NVNotifierReset(pScrn, pNv->Notifier0);
-	NVDmaStart(pNv, NvSubImageBlit, 0x104, 1);
+	NVDmaStart(pNv, subc, 0x104, 1);
 	NVDmaNext (pNv, 0);
-	NVDmaStart(pNv, NvSubImageBlit, 0x100, 1);
+	NVDmaStart(pNv, subc, 0x100, 1);
 	NVDmaNext (pNv, 0);
 	NVDmaKickoff(pNv);
 	if (!NVNotifierWaitStatus(pScrn, pNv->Notifier0, 0, timeout))
@@ -128,8 +131,9 @@ void NVResetGraphics(ScrnInfoPtr pScrn)
 
 	pitch = pNv->CurrentLayout.displayWidth * (pNv->CurrentLayout.bitsPerPixel >> 3);
 
+#if 0
 	pNv->dmaPut = pNv->dmaCurrent = READ_GET(pNv);
-	pNv->dmaMax = (pNv->fifo.cmdbuf_size >> 2) - 1;
+	pNv->dmaMax = (pNv->fifo.cmdbuf_size >> 2) - 2;
 	pNv->dmaFree = pNv->dmaMax - pNv->dmaCurrent;
 
 	/* assert there's enough room for the skips */
@@ -140,8 +144,12 @@ void NVResetGraphics(ScrnInfoPtr pScrn)
 		pNv->dmaBase[i]=0;
 	}
 	pNv->dmaFree -= SKIPS;
+#endif
 
 	NVAccelCommonInit(pScrn);
+
+	if (pNv->Architecture >= NV_ARCH_50)
+		return;
 
 	/* EXA + XAA + Xv */
 	NVDmaSetObjectOnSubchannel(pNv, NvSubContextSurfaces, NvContextSurfaces);
@@ -258,9 +266,6 @@ Bool NVInitDma(ScrnInfoPtr pScrn)
 
 	NVInitDmaCB(pScrn);
 
-	if (pNv->NoAccel)
-		return TRUE;
-
 	pNv->fifo.fb_ctxdma_handle = NvDmaFB;
 	pNv->fifo.tt_ctxdma_handle = NvDmaTT;
 	ret = drmCommandWriteRead(pNv->drm_fd, DRM_NOUVEAU_FIFO_ALLOC,
@@ -309,8 +314,8 @@ Bool NVInitDma(ScrnInfoPtr pScrn)
 	xf86DrvMsg(pScrn->scrnIndex, X_INFO,
 		   "  DMA base PUT      : 0x%08x\n", pNv->fifo.put_base);
 
-	pNv->dmaPut = pNv->dmaCurrent = READ_GET(pNv);
-	pNv->dmaMax = (pNv->fifo.cmdbuf_size >> 2) - 1;
+	pNv->dmaPut = pNv->dmaCurrent = 0;
+	pNv->dmaMax = (pNv->fifo.cmdbuf_size >> 2) - 2;
 	pNv->dmaFree = pNv->dmaMax - pNv->dmaCurrent;
 
 	for (i=0; i<SKIPS; i++)

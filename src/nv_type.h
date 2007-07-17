@@ -20,12 +20,15 @@
 #error "This driver requires a DRI-enabled X server"
 #endif
 
+#include "nv50_type.h"
+
 #define NV_ARCH_03  0x03
 #define NV_ARCH_04  0x04
 #define NV_ARCH_10  0x10
 #define NV_ARCH_20  0x20
 #define NV_ARCH_30  0x30
 #define NV_ARCH_40  0x40
+#define NV_ARCH_50  0x50
 
 #define CHIPSET_NV03     0x0010
 #define CHIPSET_NV04     0x0020
@@ -50,6 +53,8 @@
 #define CHIPSET_NV44     0x0160
 #define CHIPSET_NV44A    0x0220
 #define CHIPSET_NV45     0x0210
+#define CHIPSET_NV50     0x0190
+#define CHIPSET_NV84     0x0400
 #define CHIPSET_MISC_BRIDGED  0x00F0
 #define CHIPSET_G70      0x0090
 #define CHIPSET_G71      0x0290
@@ -174,6 +179,7 @@ typedef struct _NVRec {
     pciVideoPtr         PciInfo;
     PCITAG              PciTag;
     int                 Chipset;
+    int			_Chipset;
     int                 ChipRev;
     Bool                Primary;
     CARD32              IOAddress;
@@ -194,6 +200,7 @@ typedef struct _NVRec {
 
     NVAllocRec *        FB;
     NVAllocRec *        Cursor;
+    NVAllocRec *        CLUT;	/* NV50 only */
     NVAllocRec *        ScratchBuffer;
     NVAllocRec *        GARTScratch;
 
@@ -252,7 +259,7 @@ typedef struct _NVRec {
     CARD32              curImage[256];
     /* I2C / DDC */
     int ddc2;
-    xf86Int10InfoPtr    pInt;
+    xf86Int10InfoPtr    pInt10;
     void		(*VideoTimerCallback)(ScrnInfoPtr, Time);
     void		(*DMAKickoffCallback)(NVPtr pNv);
     XF86VideoAdaptorPtr	overlayAdaptor;
@@ -309,6 +316,11 @@ typedef struct _NVRec {
     int analog_count;
     int digital_count;
     CARD32 dcb_table[NV40_NUM_DCB_ENTRIES]; /* 10 is a good limit */
+
+    struct {
+	    ORNum dac;
+	    ORNum sor;
+    } i2cMap[4];
 } NVRec;
 
 #define NVPTR(p) ((NVPtr)((p)->driverPrivate))

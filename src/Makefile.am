@@ -55,8 +55,14 @@ nouveau_drv_la_SOURCES = \
          nv_xaa.c \
 	 nv_output.c \
 	 nv_crtc.c \
-	 nv_i2c.c \
-         nv30_exa.c
+	 nv_i2c.c  \
+         nv30_exa.c \
+	 nv50_cursor.c \
+	 nv50_dac.c \
+	 nv50_display.c \
+	 nv50_exa.c \
+	 nv50_output.c \
+	 nv50_sor.c
 
 #riva128_la_LTLIBRARIES = riva128.la
 #riva128_la_LDFLAGS = -module -avoid-version
