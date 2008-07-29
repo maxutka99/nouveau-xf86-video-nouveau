@@ -32,6 +32,8 @@
 #include "nouveau_grobj.h"
 #include "nouveau_notifier.h"
 #include "nouveau_bo.h"
+#include "nouveau_resource.h"
+#include "nouveau_pushbuf.h"
 #include "nouveau_local.h"
 
 struct nouveau_device_priv {
@@ -41,6 +43,10 @@ struct nouveau_device_priv {
 	drm_context_t ctx;
 	drmLock *lock;
 	int needs_close;
+
+	struct drm_nouveau_mem_alloc sa;
+	void *sa_map;
+	struct nouveau_resource *sa_heap;
 };
 #define nouveau_device(n) ((struct nouveau_device_priv *)(n))
 
@@ -60,16 +66,113 @@ nouveau_device_get_param(struct nouveau_device *, uint64_t param, uint64_t *v);
 NOUVEAU_PRIVATE int
 nouveau_device_set_param(struct nouveau_device *, uint64_t param, uint64_t val);
 
+struct nouveau_fence {
+	struct nouveau_channel *channel;
+};
+
+struct nouveau_fence_cb {
+	struct nouveau_fence_cb *next;
+	void (*func)(void *);
+	void *priv;
+};
+
+struct nouveau_fence_priv {
+	struct nouveau_fence base;
+	int refcount;
+
+	struct nouveau_fence *next;
+	struct nouveau_fence_cb *signal_cb;
+
+	uint32_t sequence;
+	int emitted;
+	int signalled;
+};
+#define nouveau_fence(n) ((struct nouveau_fence_priv *)(n))
+
+NOUVEAU_PRIVATE int
+nouveau_fence_new(struct nouveau_channel *, struct nouveau_fence **);
+
+NOUVEAU_PRIVATE int
+nouveau_fence_ref(struct nouveau_fence *, struct nouveau_fence **);
+
+NOUVEAU_PRIVATE int
+nouveau_fence_signal_cb(struct nouveau_fence *, void (*)(void *), void *);
+
+NOUVEAU_PRIVATE void
+nouveau_fence_emit(struct nouveau_fence *);
+
+NOUVEAU_PRIVATE int
+nouveau_fence_wait(struct nouveau_fence **);
+
+NOUVEAU_PRIVATE void
+nouveau_fence_flush(struct nouveau_channel *);
+
+struct nouveau_pushbuf_reloc {
+	struct nouveau_pushbuf_bo *pbbo;
+	uint32_t *ptr;
+	uint32_t flags;
+	uint32_t data;
+	uint32_t vor;
+	uint32_t tor;
+};
+
+struct nouveau_pushbuf_bo {
+	struct nouveau_channel *channel;
+	struct nouveau_bo *bo;
+	unsigned flags;
+	unsigned handled;
+};
+
+#define NOUVEAU_PUSHBUF_MAX_BUFFERS 1024
+#define NOUVEAU_PUSHBUF_MAX_RELOCS 1024
+struct nouveau_pushbuf_priv {
+	struct nouveau_pushbuf base;
+
+	struct nouveau_fence *fence;
+
+	unsigned nop_jump;
+	unsigned start;
+	unsigned size;
+
+	struct nouveau_pushbuf_bo *buffers;
+	unsigned nr_buffers;
+	struct nouveau_pushbuf_reloc *relocs;
+	unsigned nr_relocs;
+};
+#define nouveau_pushbuf(n) ((struct nouveau_pushbuf_priv *)(n))
+
+#define pbbo_to_ptr(o) ((uint64_t)(unsigned long)(o))
+#define ptr_to_pbbo(h) ((struct nouveau_pushbuf_bo *)(unsigned long)(h))
+#define pbrel_to_ptr(o) ((uint64_t)(unsigned long)(o))
+#define ptr_to_pbrel(h) ((struct nouveau_pushbuf_reloc *)(unsigned long)(h))
+#define bo_to_ptr(o) ((uint64_t)(unsigned long)(o))
+#define ptr_to_bo(h) ((struct nouveau_bo_priv *)(unsigned long)(h))
+
+NOUVEAU_PRIVATE int
+nouveau_pushbuf_init(struct nouveau_channel *);
+
+NOUVEAU_PRIVATE int
+nouveau_pushbuf_flush(struct nouveau_channel *, unsigned min);
+
+NOUVEAU_PRIVATE int
+nouveau_pushbuf_emit_reloc(struct nouveau_channel *, void *ptr,
+			   struct nouveau_bo *, uint32_t data, uint32_t flags,
+			   uint32_t vor, uint32_t tor);
+
+struct nouveau_dma_priv {
+	uint32_t base;
+	uint32_t max;
+	uint32_t cur;
+	uint32_t put;
+	uint32_t free;
+
+	int push_free;
+} dma;
+
 struct nouveau_channel_priv {
 	struct nouveau_channel base;
 
 	struct drm_nouveau_channel_alloc drm;
-
-	struct {
-		struct nouveau_grobj *grobj;
-		uint32_t seq;
-	} subchannel[8];
-	uint32_t subc_sequence;
 
 	uint32_t *pushbuf;
 	void     *notifier_block;
@@ -79,17 +182,20 @@ struct nouveau_channel_priv {
 	volatile uint32_t *get;
 	volatile uint32_t *ref_cnt;
 
-	struct {
-		uint32_t base, max;
-		uint32_t cur, put;
-		uint32_t free;
+	struct nouveau_dma_priv dma_master;
+	struct nouveau_dma_priv dma_bufmgr;
+	struct nouveau_dma_priv *dma;
 
-		int push_free;
-	} dma;
+	struct nouveau_fence *fence_head;
+	struct nouveau_fence *fence_tail;
+	uint32_t fence_sequence;
+	/* NV04 hackery */
+	struct nouveau_grobj *fence_grobj;
+	struct nouveau_notifier *fence_ntfy;
 
-	struct nouveau_bo_reloc *relocs;
-	int num_relocs;
-	int max_relocs;
+	struct nouveau_pushbuf_priv pb;
+
+	unsigned user_charge;
 };
 #define nouveau_channel(n) ((struct nouveau_channel_priv *)(n))
 
@@ -143,27 +249,43 @@ nouveau_notifier_wait_status(struct nouveau_notifier *, int id, int status,
 struct nouveau_bo_priv {
 	struct nouveau_bo base;
 
+	struct nouveau_pushbuf_bo *pending;
+	struct nouveau_fence *fence;
+	struct nouveau_fence *wr_fence;
+
 	struct drm_nouveau_mem_alloc drm;
 	void *map;
 
+	void *sysmem;
+	int user;
+
 	int refcount;
-};
 
-struct nouveau_bo_reloc {
-	struct nouveau_bo_priv *bo;
-	uint32_t *ptr;
-	uint32_t flags;
-	uint32_t data, vor, tor;
+	uint64_t offset;
+	uint64_t flags;
+	int tiled;
 };
-
 #define nouveau_bo(n) ((struct nouveau_bo_priv *)(n))
+
+NOUVEAU_PRIVATE int
+nouveau_bo_init(struct nouveau_device *);
+
+NOUVEAU_PRIVATE void
+nouveau_bo_takedown(struct nouveau_device *);
 
 NOUVEAU_PRIVATE int
 nouveau_bo_new(struct nouveau_device *, uint32_t flags, int align, int size,
 	       struct nouveau_bo **);
 
 NOUVEAU_PRIVATE int
+nouveau_bo_user(struct nouveau_device *, void *ptr, int size,
+		struct nouveau_bo **);
+
+NOUVEAU_PRIVATE int
 nouveau_bo_ref(struct nouveau_device *, uint64_t handle, struct nouveau_bo **);
+
+NOUVEAU_PRIVATE int
+nouveau_bo_set_status(struct nouveau_bo *, uint32_t flags);
 
 NOUVEAU_PRIVATE void
 nouveau_bo_del(struct nouveau_bo **);
@@ -174,12 +296,19 @@ nouveau_bo_map(struct nouveau_bo *, uint32_t flags);
 NOUVEAU_PRIVATE void
 nouveau_bo_unmap(struct nouveau_bo *);
 
-NOUVEAU_PRIVATE void
-nouveau_bo_emit_reloc(struct nouveau_channel *chan, void *ptr,
-		      struct nouveau_bo *, uint32_t data, uint32_t flags,
-		      uint32_t vor, uint32_t tor);
+NOUVEAU_PRIVATE int
+nouveau_bo_validate(struct nouveau_channel *, struct nouveau_bo *,
+		    uint32_t flags);
+
+NOUVEAU_PRIVATE int
+nouveau_resource_init(struct nouveau_resource **heap, unsigned start,
+		      unsigned size);
+
+NOUVEAU_PRIVATE int
+nouveau_resource_alloc(struct nouveau_resource *heap, int size, void *priv,
+		       struct nouveau_resource **);
 
 NOUVEAU_PRIVATE void
-nouveau_bo_validate(struct nouveau_channel *);
+nouveau_resource_free(struct nouveau_resource **);
 
 #endif

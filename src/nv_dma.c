@@ -30,13 +30,13 @@ static void NVDumpLockupInfo(NVPtr pNv)
 	struct nouveau_channel_priv *chan = nouveau_channel(pNv->chan);
 	int i, start;
 
-	start = ((*chan->get - chan->dma.base) >> 2) - 20;
+	start = ((*chan->get - chan->dma->base) >> 2) - 20;
 	if (start < 0)
 		start = 0;
 
 	xf86DrvMsg(0, X_INFO, "Fifo dump (lockup 0x%04x,0x%04x):\n",
-		   (*chan->get - chan->dma.base) >> 2, chan->dma.put);
-	for(i = start; i < chan->dma.put + 10; i++)
+		   (*chan->get - chan->dma->base) >> 2, chan->dma->put);
+	for(i = start; i < chan->dma->put + 10; i++)
 		xf86DrvMsg(0, X_INFO, "[0x%04x] 0x%08x\n", i, chan->pushbuf[i]);
 	xf86DrvMsg(0, X_INFO, "End of fifo dump\n");
 }
@@ -55,7 +55,7 @@ NVLockedUp(ScrnInfoPtr pScrn)
 	NVDumpLockupInfo(pNv);
 
 	FatalError("DMA queue hang: dmaPut=%x, current=%x, status=%x\n",
-		   chan->dma.put, (*chan->get - chan->dma.base) >> 2,
+		   chan->dma->put, (*chan->get - chan->dma->base) >> 2,
 		   pNv->PGRAPH[NV_PGRAPH_STATUS/4]);
 }
 
@@ -80,7 +80,7 @@ void NVSync(ScrnInfoPtr pScrn)
 	/* Wait for entire FIFO to be processed */
 	t_start = GetTimeInMillis();
 	while((GetTimeInMillis() - t_start) < timeout &&
-	      (((*nvchan->get - nvchan->dma.base) >> 2)!= nvchan->dma.put));
+	      (((*nvchan->get - nvchan->dma->base) >> 2)!= nvchan->dma->put));
 	if ((GetTimeInMillis() - t_start) >= timeout) {
 		NVLockedUp(pScrn);
 		return;

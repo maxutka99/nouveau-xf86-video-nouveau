@@ -1748,9 +1748,7 @@ NVMapMem(ScrnInfoPtr pScrn)
 		}
 	}
 
-	if ((pNv->FB && nouveau_bo_map(pNv->FB, NOUVEAU_BO_RDWR)) ||
-	    (pNv->GART && nouveau_bo_map(pNv->GART, NOUVEAU_BO_RDWR)) ||
-	    (pNv->CLUT0 && nouveau_bo_map(pNv->CLUT0, NOUVEAU_BO_RDWR)) ||
+	if ((pNv->CLUT0 && nouveau_bo_map(pNv->CLUT0, NOUVEAU_BO_RDWR)) ||
 	    (pNv->CLUT1 && nouveau_bo_map(pNv->CLUT1, NOUVEAU_BO_RDWR)) ||
 	    nouveau_bo_map(pNv->Cursor, NOUVEAU_BO_RDWR) ||
 	    (pNv->randr12_enable && nouveau_bo_map(pNv->Cursor2, NOUVEAU_BO_RDWR))) {
@@ -2446,7 +2444,9 @@ NVScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
 		FBStart = pNv->ShadowPtr;
 	} else {
 		pNv->ShadowPtr = NULL;
+		nouveau_bo_map(pNv->FB, NOUVEAU_BO_RDWR);
 		FBStart = pNv->FB->map;
+		nouveau_bo_unmap(pNv->FB);
 	}
 
 	switch (pScrn->bitsPerPixel) {

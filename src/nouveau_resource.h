@@ -20,29 +20,18 @@
  * SOFTWARE.
  */
 
-#ifndef __NOUVEAU_CHANNEL_H__
-#define __NOUVEAU_CHANNEL_H__
+#ifndef __NOUVEAU_RESOURCE_H__
+#define __NOUVEAU_RESOURCE_H__
 
-struct nouveau_subchannel {
-	struct nouveau_grobj *gr;
-	unsigned sequence;
-};
+struct nouveau_resource {
+	struct nouveau_resource *prev;
+	struct nouveau_resource *next;
 
-struct nouveau_channel {
-	struct nouveau_device *device;
-	int id;
+	int in_use;
+	void *priv;
 
-	struct nouveau_pushbuf *pushbuf;
-
-	struct nouveau_grobj *nullobj;
-	struct nouveau_grobj *vram;
-	struct nouveau_grobj *gart;
-
-	void *user_private;
-	void (*hang_notify)(struct nouveau_channel *);
-
-	struct nouveau_subchannel subc[8];
-	unsigned subc_sequence;
+	unsigned int start;
+	unsigned int size;
 };
 
 #endif

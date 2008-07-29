@@ -28,102 +28,119 @@
 #include "nouveau_dma.h"
 
 int
-nouveau_channel_alloc(struct nouveau_device *userdev, uint32_t fb_ctxdma,
-		      uint32_t tt_ctxdma, struct nouveau_channel **userchan)
+nouveau_channel_alloc(struct nouveau_device *dev, uint32_t fb_ctxdma,
+		      uint32_t tt_ctxdma, struct nouveau_channel **chan)
 {
-	struct nouveau_device_priv *nv = nouveau_device(userdev);
-	struct nouveau_channel_priv *chan;
+	struct nouveau_device_priv *nvdev = nouveau_device(dev);
+	struct nouveau_channel_priv *nvchan;
 	int ret;
 
-	if (!nv || !userchan || *userchan)
+	if (!nvdev || !chan || *chan)
 	    return -EINVAL;
 
-	chan = calloc(1, sizeof(*chan));
-	if (!chan)
+	nvchan = calloc(1, sizeof(struct nouveau_channel_priv));
+	if (!nvchan)
 		return -ENOMEM;
-	chan->base.device = userdev;
+	nvchan->base.device = dev;
 
-	chan->drm.fb_ctxdma_handle = fb_ctxdma;
-	chan->drm.tt_ctxdma_handle = tt_ctxdma;
-	ret = drmCommandWriteRead(nv->fd, DRM_NOUVEAU_CHANNEL_ALLOC,
-				  &chan->drm, sizeof(chan->drm));
+	nvchan->drm.fb_ctxdma_handle = fb_ctxdma;
+	nvchan->drm.tt_ctxdma_handle = tt_ctxdma;
+	ret = drmCommandWriteRead(nvdev->fd, DRM_NOUVEAU_CHANNEL_ALLOC,
+				  &nvchan->drm, sizeof(nvchan->drm));
 	if (ret) {
-		free(chan);
+		free(nvchan);
 		return ret;
 	}
 
-	chan->base.id = chan->drm.channel;
-	if (nouveau_grobj_ref(&chan->base, chan->drm.fb_ctxdma_handle,
-			      &chan->base.vram) ||
-	    nouveau_grobj_ref(&chan->base, chan->drm.tt_ctxdma_handle,
-		    	      &chan->base.gart)) {
-		nouveau_channel_free((void *)&chan);
+	nvchan->base.id = nvchan->drm.channel;
+	if (nouveau_grobj_ref(&nvchan->base, nvchan->drm.fb_ctxdma_handle,
+			      &nvchan->base.vram) ||
+	    nouveau_grobj_ref(&nvchan->base, nvchan->drm.tt_ctxdma_handle,
+		    	      &nvchan->base.gart)) {
+		nouveau_channel_free((void *)&nvchan);
+		return -EINVAL;
 	}
 
-	ret = drmMap(nv->fd, chan->drm.ctrl, chan->drm.ctrl_size,
-		     (void*)&chan->user);
+	ret = drmMap(nvdev->fd, nvchan->drm.ctrl, nvchan->drm.ctrl_size,
+		     (void*)&nvchan->user);
 	if (ret) {
-		nouveau_channel_free((void *)&chan);
+		nouveau_channel_free((void *)&nvchan);
 		return ret;
 	}
-	chan->put     = &chan->user[0x40/4];
-	chan->get     = &chan->user[0x44/4];
-	chan->ref_cnt = &chan->user[0x48/4];
+	nvchan->put     = &nvchan->user[0x40/4];
+	nvchan->get     = &nvchan->user[0x44/4];
+	nvchan->ref_cnt = &nvchan->user[0x48/4];
 
-	ret = drmMap(nv->fd, chan->drm.notifier, chan->drm.notifier_size,
-		     (drmAddressPtr)&chan->notifier_block);
+	ret = drmMap(nvdev->fd, nvchan->drm.notifier, nvchan->drm.notifier_size,
+		     (drmAddressPtr)&nvchan->notifier_block);
 	if (ret) {
-		nouveau_channel_free((void *)&chan);
-		return ret;
-	}
-
-	ret = drmMap(nv->fd, chan->drm.cmdbuf, chan->drm.cmdbuf_size,
-		     (void*)&chan->pushbuf);
-	if (ret) {
-		nouveau_channel_free((void *)&chan);
+		nouveau_channel_free((void *)&nvchan);
 		return ret;
 	}
 
-	chan->max_relocs = chan->drm.cmdbuf_size / 4;
-	chan->num_relocs = 0;
-	chan->relocs =
-		malloc(sizeof(struct nouveau_bo_reloc) * chan->max_relocs);
+	ret = drmMap(nvdev->fd, nvchan->drm.cmdbuf, nvchan->drm.cmdbuf_size,
+		     (void*)&nvchan->pushbuf);
+	if (ret) {
+		nouveau_channel_free((void *)&nvchan);
+		return ret;
+	}
 
-	nouveau_dma_channel_init(&chan->base);
+	ret = nouveau_grobj_alloc(&nvchan->base, 0x00000000, 0x0030,
+				  &nvchan->base.nullobj);
+	if (ret) {
+		nouveau_channel_free((void *)&nvchan);
+		return ret;
+	}
 
-	*userchan = &chan->base;
+	nouveau_dma_channel_init(&nvchan->base);
+	nouveau_pushbuf_init(&nvchan->base);
+
+	if (dev->chipset < 0x10) {
+		ret = nouveau_grobj_alloc(&nvchan->base, 0xbeef3901, 0x0039,
+					  &nvchan->fence_grobj);
+		if (ret) {
+			nouveau_channel_free((void *)&nvchan);
+			return ret;
+		}
+
+		ret = nouveau_notifier_alloc(&nvchan->base, 0xbeef3902, 1,
+					     &nvchan->fence_ntfy);
+		if (ret) {
+			nouveau_channel_free((void *)&nvchan);
+			return ret;
+		}
+
+		BIND_RING (&nvchan->base, nvchan->fence_grobj, 0);
+		BEGIN_RING(&nvchan->base, nvchan->fence_grobj, 0x0180, 1);
+		OUT_RING  (&nvchan->base, nvchan->fence_ntfy->handle);
+	}
+
+	*chan = &nvchan->base;
 	return 0;
 }
 
 void
-nouveau_channel_free(struct nouveau_channel **userchan)
+nouveau_channel_free(struct nouveau_channel **chan)
 {
-	struct nouveau_channel_priv *chan;
-	
-	if (!userchan)
+	struct nouveau_channel_priv *nvchan;
+	struct nouveau_device_priv *nvdev;
+	struct drm_nouveau_channel_free cf;
+
+	if (!chan || !*chan)
 		return;
-	chan = nouveau_channel(*userchan);
+	nvchan = nouveau_channel(*chan);
+	*chan = NULL;
+	nvdev = nouveau_device(nvchan->base.device);
+	
+	FIRE_RING_CH(&nvchan->base);
 
-	if (chan) {
-		struct nouveau_device_priv *nv;
-		struct drm_nouveau_channel_free cf;
+	nouveau_grobj_free(&nvchan->base.vram);
+	nouveau_grobj_free(&nvchan->base.gart);
+	nouveau_grobj_free(&nvchan->base.nullobj);
 
-		nv = nouveau_device((*userchan)->device);
-		*userchan = NULL;
-
-		FIRE_RING_CH(*userchan);
-
-		if (chan->relocs)
-			free(chan->relocs);
-
-		nouveau_grobj_free(&chan->base.vram);
-		nouveau_grobj_free(&chan->base.gart);
-
-		cf.channel = chan->drm.channel;
-		drmCommandWrite(nv->fd, DRM_NOUVEAU_CHANNEL_FREE,
-				&cf, sizeof(cf));
-		free(chan);
-	}
+	cf.channel = nvchan->drm.channel;
+	drmCommandWrite(nvdev->fd, DRM_NOUVEAU_CHANNEL_FREE, &cf, sizeof(cf));
+	free(nvchan);
 }
 
 

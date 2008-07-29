@@ -34,7 +34,10 @@ nouveau_drv_la_SOURCES = \
 			 nouveau_grobj.c nouveau_grobj.h \
 			 nouveau_notifier.c nouveau_notifier.h \
 			 nouveau_dma.c nouveau_dma.h \
+			 nouveau_pushbuf.c nouveau_pushbuf.h \
 			 nouveau_bo.c nouveau_bo.h \
+			 nouveau_resource.c nouveau_resource.h \
+			 nouveau_fence.c \
 			 nouveau_class.h \
 			 nouveau_local.h \
 			 nouveau_xv.c \

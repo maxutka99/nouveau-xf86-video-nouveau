@@ -28,173 +28,192 @@
 #include "nouveau_dma.h"
 #include "nouveau_local.h"
 
-#define READ_GET(ch) ((*(ch)->get - (ch)->dma.base) >> 2)
-#define WRITE_PUT(ch, val) do {                       \
-	volatile int dum;                             \
-	NOUVEAU_DMA_BARRIER;	                      \
-	dum=READ_GET(ch);                             \
-	*(ch)->put = (((val) << 2) + (ch)->dma.base); \
-	NOUVEAU_DMA_BARRIER;	                      \
-} while(0)
-
-#ifdef NOUVEAU_DMA_DEBUG
-char faulty[1024];
-#endif
-
-void
-nouveau_dma_channel_init(struct nouveau_channel *userchan)
+static inline uint32_t
+READ_GET(struct nouveau_channel_priv *nvchan)
 {
-	struct nouveau_channel_priv *chan = nouveau_channel(userchan);
-	int i;
-
-	chan->dma.base = chan->drm.put_base;
-	chan->dma.cur  = chan->dma.put = RING_SKIPS;
-	chan->dma.max  = (chan->drm.cmdbuf_size >> 2) - 2;
-	chan->dma.free = chan->dma.max - chan->dma.cur;
-
-	for (i = 0; i < RING_SKIPS; i++)
-		chan->pushbuf[i] = 0x00000000;
+	return *nvchan->get;
 }
-/* Reduce the cost of a very short wait, we're still burning cpu though. */
-/* Also take the odd case into account that t_start is really 0. */
-#define CHECK_TIMEOUT() do {										\
-	if (counter < 0xFFFFFFFF) {										\
-		counter++;												\
-	} else if (!t_start) {												\
-		t_start = NOUVEAU_TIME_MSEC();								\
-		if (!t_start)												\
-			t_start++;											\
-	} else if ((NOUVEAU_TIME_MSEC() - t_start) > NOUVEAU_DMA_TIMEOUT) {	\
-		return - EBUSY;											\
-	}															\
-} while(0)
 
-int
-nouveau_dma_wait(struct nouveau_channel *userchan, int size)
+static inline void
+WRITE_PUT(struct nouveau_channel_priv *nvchan, uint32_t val)
 {
-	struct nouveau_channel_priv *chan = nouveau_channel(userchan);
-	uint32_t get, counter = 0, t_start = 0;
+	uint32_t put = ((val << 2) + nvchan->dma->base);
+	volatile int dum;
 
-	FIRE_RING_CH(userchan);
+	NOUVEAU_DMA_BARRIER;
+	dum = READ_GET(nvchan);
 
-	while (chan->dma.free < size) {
-		get = READ_GET(chan);
-
-		if (chan->dma.put >= get) {
-			chan->dma.free = chan->dma.max - chan->dma.cur;
-
-			if (chan->dma.free < size) {
-#ifdef NOUVEAU_DMA_DEBUG
-				chan->dma.push_free = 1;
+	*nvchan->put = put;
+	nvchan->dma->put = val;
+#ifdef NOUVEAU_DMA_TRACE
+	NOUVEAU_MSG("WRITE_PUT %d/0x%08x\n", nvchan->drm.channel, put);
 #endif
-				OUT_RING_CH(userchan,
-					    0x20000000 | chan->dma.base);
-				if (get <= RING_SKIPS) {
-					/*corner case - will be idle*/
-					if (chan->dma.put <= RING_SKIPS)
-						WRITE_PUT(chan, RING_SKIPS + 1);
 
-					do {
-						CHECK_TIMEOUT();
-						get = READ_GET(chan);
-					} while (get <= RING_SKIPS);
-				}
+	NOUVEAU_DMA_BARRIER;
+}
 
-				WRITE_PUT(chan, RING_SKIPS);
-				chan->dma.cur  = chan->dma.put = RING_SKIPS;
-				chan->dma.free = get - (RING_SKIPS + 1);
-			}
-		} else {
-			chan->dma.free = get - chan->dma.cur - 1;
-		}
+static inline int
+LOCAL_GET(struct nouveau_dma_priv *dma, uint32_t *val)
+{
+	uint32_t get = *val;
 
-		CHECK_TIMEOUT();
+	if (get >= dma->base && get <= (dma->base + (dma->max << 2))) {
+		*val = (get - dma->base) >> 2;
+		return 1;
 	}
 
 	return 0;
 }
 
-#ifdef NOUVEAU_DMA_SUBCHAN_LRU
 void
-nouveau_dma_subc_bind(struct nouveau_grobj *grobj)
+nouveau_dma_channel_init(struct nouveau_channel *chan)
 {
-	struct nouveau_channel_priv *chan = nouveau_channel(grobj->channel);
-	int subc = -1, i;
-	
-	for (i = 0; i < 8; i++) {
-		if (chan->subchannel[i].grobj &&
-		    chan->subchannel[i].grobj->bound == 
-		    NOUVEAU_GROBJ_EXPLICIT_BIND)
+	struct nouveau_channel_priv *nvchan = nouveau_channel(chan);
+	int i;
+
+	nvchan->dma = &nvchan->dma_master;
+	nvchan->dma->base = nvchan->drm.put_base;
+	nvchan->dma->cur  = nvchan->dma->put = 0;
+	nvchan->dma->max  = (nvchan->drm.cmdbuf_size >> 2) - 2;
+	nvchan->dma->free = nvchan->dma->max - nvchan->dma->cur;
+
+	RING_SPACE_CH(chan, RING_SKIPS);
+	for (i = 0; i < RING_SKIPS; i++)
+		OUT_RING_CH(chan, 0);
+}
+
+#define CHECK_TIMEOUT() do {                                                   \
+	if ((NOUVEAU_TIME_MSEC() - t_start) > NOUVEAU_DMA_TIMEOUT)             \
+		return - EBUSY;                                                \
+} while(0)
+
+int
+nouveau_dma_wait(struct nouveau_channel *chan, int size)
+{
+	struct nouveau_channel_priv *nvchan = nouveau_channel(chan);
+	struct nouveau_dma_priv *dma = nvchan->dma;
+	uint32_t get, t_start;
+
+	FIRE_RING_CH(chan);
+
+	t_start = NOUVEAU_TIME_MSEC();
+	while (dma->free < size) {
+		CHECK_TIMEOUT();
+
+		get = READ_GET(nvchan);
+		if (!LOCAL_GET(dma, &get))
 			continue;
-		/* Reading into the -1 index gives undefined results, so pick straight away. */
-		if (subc == -1 || chan->subchannel[i].seq < chan->subchannel[subc].seq)
-			subc = i;
+
+		if (dma->put >= get) {
+			dma->free = dma->max - dma->cur;
+
+			if (dma->free < size) {
+#ifdef NOUVEAU_DMA_DEBUG
+				dma->push_free = 1;
+#endif
+				OUT_RING_CH(chan, 0x20000000 | dma->base);
+				if (get <= RING_SKIPS) {
+					/*corner case - will be idle*/
+					if (dma->put <= RING_SKIPS)
+						WRITE_PUT(nvchan,
+							  RING_SKIPS + 1);
+
+					do {
+						CHECK_TIMEOUT();
+						get = READ_GET(nvchan);
+						if (!LOCAL_GET(dma, &get))
+							get = 0;
+					} while (get <= RING_SKIPS);
+				}
+
+				WRITE_PUT(nvchan, RING_SKIPS);
+				dma->cur  = dma->put = RING_SKIPS;
+				dma->free = get - (RING_SKIPS + 1);
+			}
+		} else {
+			dma->free = get - dma->cur - 1;
+		}
 	}
-	assert(subc >= 0);
 
-	if (chan->subchannel[subc].grobj)
-		chan->subchannel[subc].grobj->bound = 0;
-	chan->subchannel[subc].grobj = grobj;
-	grobj->subc  = subc;
-	grobj->bound = NOUVEAU_GROBJ_BOUND;
+	return 0;
+}
 
-	BEGIN_RING_CH(grobj->channel, grobj, 0, 1);
-	nouveau_dma_out  (grobj->channel, grobj->handle);
+#ifdef NOUVEAU_DMA_DUMP_POSTRELOC_PUSHBUF
+static void
+nouveau_dma_parse_pushbuf(struct nouveau_channel *chan, int get, int put)
+{
+	struct nouveau_channel_priv *nvchan = nouveau_channel(chan);
+	unsigned mthd_count = 0;
+	
+	while (get != put) {
+		uint32_t gpuget = (get << 2) + nvchan->drm.put_base;
+		uint32_t data;
+
+		if (get < 0 || get >= nvchan->drm.cmdbuf_size) {
+			NOUVEAU_ERR("DMA_PT 0x%08x\n", gpuget);
+			assert(0);
+		}
+		data = nvchan->pushbuf[get++];
+
+		if (mthd_count) {
+			NOUVEAU_MSG("0x%08x 0x%08x\n", gpuget, data);
+			mthd_count--;
+			continue;
+		}
+
+		switch (data & 0x60000000) {
+		case 0x00000000:
+			mthd_count = (data >> 18) & 0x7ff;
+			NOUVEAU_MSG("0x%08x 0x%08x MTHD "
+				    "Sc %d Mthd 0x%04x Size %d\n",
+				    gpuget, data, (data>>13) & 7, data & 0x1ffc,
+				    mthd_count);
+			break;
+		case 0x20000000:
+			get = (data & 0x1ffffffc) >> 2;
+			NOUVEAU_MSG("0x%08x 0x%08x JUMP 0x%08x\n",
+				    gpuget, data, data & 0x1ffffffc);
+			continue;
+		case 0x40000000:
+			mthd_count = (data >> 18) & 0x7ff;
+			NOUVEAU_MSG("0x%08x 0x%08x NINC "
+				    "Sc %d Mthd 0x%04x Size %d\n",
+				    gpuget, data, (data>>13) & 7, data & 0x1ffc,
+				    mthd_count);
+			break;
+		case 0x60000000:
+			/* DMA_OPCODE_CALL apparently, doesn't seem to work on
+			 * my NV40 at least..
+			 */
+			/* fall-through */
+		default:
+			NOUVEAU_MSG("DMA_PUSHER 0x%08x 0x%08x\n",
+				    gpuget, data);
+			assert(0);
+		}
+	}
 }
 #endif
 
 void
-nouveau_dma_kickoff(struct nouveau_channel *userchan)
+nouveau_dma_kickoff(struct nouveau_channel *chan)
 {
-	struct nouveau_channel_priv *chan = nouveau_channel(userchan);
-	uint32_t put_offset;
-	int i;
+	struct nouveau_channel_priv *nvchan = nouveau_channel(chan);
+	struct nouveau_dma_priv *dma = nvchan->dma;
 
-	if (chan->dma.cur == chan->dma.put)
+	if (dma->cur == dma->put)
 		return;
-
-	if (chan->num_relocs) {
-		nouveau_bo_validate(userchan);
-		
-		for (i = 0; i < chan->num_relocs; i++) {
-			struct nouveau_bo_reloc *r = &chan->relocs[i];
-			uint32_t push;
-
-			if (r->flags & NOUVEAU_BO_LOW) {
-				push = r->bo->base.offset + r->data;
-			} else
-			if (r->flags & NOUVEAU_BO_HIGH) {
-				push = (r->bo->base.offset + r->data) >> 32;
-			} else {
-				push = r->data;
-			}
-
-			if (r->flags & NOUVEAU_BO_OR) {
-				if (r->flags & NOUVEAU_BO_VRAM)
-					push |= r->vor;
-				else
-					push |= r->tor;
-			}
-
-			*r->ptr = push;
-		}
-
-		chan->num_relocs = 0;
-	}
 
 #ifdef NOUVEAU_DMA_DEBUG
-	if (chan->dma.push_free) {
-		NOUVEAU_ERR("Packet incomplete: %d left\n", chan->dma.push_free);
+	if (dma->push_free) {
+		NOUVEAU_ERR("Packet incomplete: %d left\n", dma->push_free);
 		return;
 	}
 #endif
 
-	put_offset = (chan->dma.cur << 2) + chan->dma.base;
-#ifdef NOUVEAU_DMA_TRACE
-	NOUVEAU_MSG("FIRE_RING %d/0x%08x\n", chan->drm.channel, put_offset);
+#ifdef NOUVEAU_DMA_DUMP_POSTRELOC_PUSHBUF
+	nouveau_dma_parse_pushbuf(chan, dma->put, dma->cur);
 #endif
-	chan->dma.put  = chan->dma.cur;
-	NOUVEAU_DMA_BARRIER;
-	*chan->put     = put_offset;
-	NOUVEAU_DMA_BARRIER;
+
+	WRITE_PUT(nvchan, dma->cur);
 }

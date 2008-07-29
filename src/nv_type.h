@@ -385,6 +385,7 @@ typedef struct _NVRec {
 
     /* Various pinned memory regions */
     struct nouveau_bo * FB;
+    void               *FBMap;
     //struct nouveau_bo * FB_old; /* for KMS */
     struct nouveau_bo * shadow[2]; /* for easy acces by exa */
     struct nouveau_bo * Cursor;

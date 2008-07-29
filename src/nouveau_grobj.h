@@ -33,7 +33,7 @@ struct nouveau_grobj {
 	enum {
 		NOUVEAU_GROBJ_UNBOUND = 0,
 		NOUVEAU_GROBJ_BOUND = 1,
-		NOUVEAU_GROBJ_EXPLICIT_BIND = 2,
+		NOUVEAU_GROBJ_BOUND_EXPLICIT = 2
 	} bound;
 	int subc;
 };
