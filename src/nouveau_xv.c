@@ -346,12 +346,6 @@ nouveau_xv_bo_realloc(ScrnInfoPtr pScrn, unsigned flags, unsigned size,
 	if (ret)
 		return ret;
 
-	ret = nouveau_bo_map(*pbo, NOUVEAU_BO_RDWR);
-	if (ret) {
-		nouveau_bo_del(pbo);
-		return ret;
-	}
-
 	return 0;
 }
 
@@ -1196,8 +1190,11 @@ NVPutImage(ScrnInfoPtr pScrn, short src_x, short src_y, short drw_x,
 	}
 
 	if (newTTSize <= destination_buffer->size) {
-		unsigned char *dst = destination_buffer->map;
+		unsigned char *dst;
 		int i = 0;
+
+		nouveau_bo_map(destination_buffer, NOUVEAU_BO_WR);
+		dst = destination_buffer->map;
 
 		/* Upload to GART */
 		if (action_flags & IS_YV12) {
@@ -1232,6 +1229,8 @@ NVPutImage(ScrnInfoPtr pScrn, short src_x, short src_y, short drw_x,
 				buf += srcPitch;
 			}
 		}
+
+		nouveau_bo_unmap(destination_buffer);
 
 		BEGIN_RING(chan, m2mf,
 			   NV04_MEMORY_TO_MEMORY_FORMAT_DMA_BUFFER_IN, 2);
@@ -1318,6 +1317,7 @@ NVPutImage(ScrnInfoPtr pScrn, short src_x, short src_y, short drw_x,
 
 	} else {
 CPU_copy:
+		nouveau_bo_map(pPriv->video_mem, NOUVEAU_BO_WR);
 		map = pPriv->video_mem->map + offset;
 
 		if (action_flags & IS_YV12) {
@@ -1383,6 +1383,8 @@ CPU_copy:
 				buf += srcPitch - (npixels << 1);
 			}
 		}
+
+		nouveau_bo_unmap(pPriv->video_mem);
 	}
 
 	if (skip)
