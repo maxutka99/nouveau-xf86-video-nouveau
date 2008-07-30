@@ -20,7 +20,7 @@
 
 #include "nv_pcicompat.h"
 
-#include "nouveau_local.h" /* needed for NOUVEAU_EXA_PIXMAPS */
+#include "nouveau_local.h"
 
 #include "nouveau_crtc.h"
 #include "nouveau_connector.h"
@@ -224,11 +224,7 @@ typedef struct _riva_hw_state
 typedef struct _NVCrtcPrivateRec {
 	int head;
 	uint8_t last_dpms;
-#if NOUVEAU_EXA_PIXMAPS
 	struct nouveau_bo *shadow;
-#else
-	ExaOffscreenArea *shadow;
-#endif /* NOUVEAU_EXA_PIXMAPS */
 	int fp_users;
 } NVCrtcPrivateRec, *NVCrtcPrivatePtr;
 
@@ -385,7 +381,7 @@ typedef struct _NVRec {
 
     /* Various pinned memory regions */
     struct nouveau_bo * FB;
-    void               *FBMap;
+    void *              FBMap;
     //struct nouveau_bo * FB_old; /* for KMS */
     struct nouveau_bo * shadow[2]; /* for easy acces by exa */
     struct nouveau_bo * Cursor;

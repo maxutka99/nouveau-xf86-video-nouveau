@@ -1333,9 +1333,6 @@ nv_crtc_shadow_allocate (xf86CrtcPtr crtc, int width, int height)
 {
 	NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
 	ScrnInfoPtr pScrn = crtc->scrn;
-#if !NOUVEAU_EXA_PIXMAPS
-	ScreenPtr pScreen = pScrn->pScreen;
-#endif /* !NOUVEAU_EXA_PIXMAPS */
 	NVPtr pNv = NVPTR(pScrn);
 	void *offset;
 
@@ -1348,7 +1345,6 @@ nv_crtc_shadow_allocate (xf86CrtcPtr crtc, int width, int height)
 	size = rotate_pitch * height;
 
 	assert(nv_crtc->shadow == NULL);
-#if NOUVEAU_EXA_PIXMAPS
 	if (nouveau_bo_new(pNv->dev, NOUVEAU_BO_VRAM | NOUVEAU_BO_PIN,
 			align, size, &nv_crtc->shadow)) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "Failed to allocate memory for shadow buffer!\n");
@@ -1362,16 +1358,6 @@ nv_crtc_shadow_allocate (xf86CrtcPtr crtc, int width, int height)
 	}
 
 	offset = nv_crtc->shadow->map;
-#else
-	nv_crtc->shadow = exaOffscreenAlloc(pScreen, size, align, TRUE, NULL, NULL);
-	if (nv_crtc->shadow == NULL) {
-		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			"Couldn't allocate shadow memory for rotated CRTC.\n");
-		return NULL;
-	}
-	offset = pNv->FB->map + nv_crtc->shadow->offset;
-#endif /* NOUVEAU_EXA_PIXMAPS */
-
 	return offset;
 }
 
@@ -1382,15 +1368,11 @@ static PixmapPtr
 nv_crtc_shadow_create(xf86CrtcPtr crtc, void *data, int width, int height)
 {
 	ScrnInfoPtr pScrn = crtc->scrn;
-#if NOUVEAU_EXA_PIXMAPS
 	ScreenPtr pScreen = pScrn->pScreen;
 	NVCrtcPrivatePtr nv_crtc = crtc->driver_private;
-#endif /* NOUVEAU_EXA_PIXMAPS */
 	unsigned long rotate_pitch;
 	PixmapPtr rotate_pixmap;
-#if NOUVEAU_EXA_PIXMAPS
 	struct nouveau_pixmap *nvpix;
-#endif /* NOUVEAU_EXA_PIXMAPS */
 
 	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "nv_crtc_shadow_create is called.\n");
 
@@ -1399,7 +1381,6 @@ nv_crtc_shadow_create(xf86CrtcPtr crtc, void *data, int width, int height)
 
 	rotate_pitch = pScrn->displayWidth * (pScrn->bitsPerPixel/8);
 
-#if NOUVEAU_EXA_PIXMAPS
 	/* Create a dummy pixmap, to get a private that will be accepted by the system.*/
 	rotate_pixmap = pScreen->CreatePixmap(pScreen, 
 								0, /* width */
@@ -1410,21 +1391,12 @@ nv_crtc_shadow_create(xf86CrtcPtr crtc, void *data, int width, int height)
 	#else
 								pScrn->depth);
 	#endif /* CREATE_PIXMAP_USAGE_SCRATCH */
-#else
-	rotate_pixmap = GetScratchPixmapHeader(pScrn->pScreen,
-								width, height,
-								pScrn->depth,
-								pScrn->bitsPerPixel,
-								rotate_pitch,
-								data);
-#endif /* NOUVEAU_EXA_PIXMAPS */
 
 	if (rotate_pixmap == NULL) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			"Couldn't allocate shadow pixmap for rotated CRTC\n");
 	}
 
-#if NOUVEAU_EXA_PIXMAPS
 	nvpix = exaGetPixmapDriverPrivate(rotate_pixmap);
 	if (!nvpix) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "No initial shadow private available for rotation.\n");
@@ -1445,7 +1417,6 @@ nv_crtc_shadow_create(xf86CrtcPtr crtc, void *data, int width, int height)
 	nvpix = exaGetPixmapDriverPrivate(rotate_pixmap);
 	if (!nvpix || !nvpix->bo)
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "No final shadow private available for rotation.\n");
-#endif /* NOUVEAU_EXA_PIXMAPS */
 
 	return rotate_pixmap;
 }
@@ -1462,12 +1433,6 @@ nv_crtc_shadow_destroy(xf86CrtcPtr crtc, PixmapPtr rotate_pixmap, void *data)
 	if (rotate_pixmap) { /* This should also unmap the buffer object if relevant. */
 		pScreen->DestroyPixmap(rotate_pixmap);
 	}
-
-#if !NOUVEAU_EXA_PIXMAPS
-	if (data && nv_crtc->shadow) {
-		exaOffscreenFree(pScreen, nv_crtc->shadow);
-	}
-#endif /* !NOUVEAU_EXA_PIXMAPS */
 
 	nv_crtc->shadow = NULL;
 }
@@ -1876,11 +1841,7 @@ NVCrtcSetBase (xf86CrtcPtr crtc, int x, int y, Bool bios_restore)
 	} else {
 		start += ((y * pScrn->displayWidth + x) * (pScrn->bitsPerPixel/8));
 		if (crtc->rotatedData != NULL) { /* we do not exist on the real framebuffer */
-#if NOUVEAU_EXA_PIXMAPS
 			start = nv_crtc->shadow->offset;
-#else
-			start = pNv->FB->offset + nv_crtc->shadow->offset; /* We do exist relative to the framebuffer */
-#endif
 		} else {
 			start += pNv->FB->offset;
 		}

@@ -1673,21 +1673,6 @@ NVMapMem(ScrnInfoPtr pScrn)
 	nouveau_device_get_param(pNv->dev, NOUVEAU_GETPARAM_AGP_SIZE, &res);
 	pNv->AGPSize=res;
 
-#if !NOUVEAU_EXA_PIXMAPS
-	if (nouveau_bo_new(pNv->dev, NOUVEAU_BO_VRAM | NOUVEAU_BO_PIN,
-		0, pNv->VRAMPhysicalSize / 2, &pNv->FB)) {
-			xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "Failed to allocate memory for framebuffer!\n");
-			return FALSE;
-	}
-	xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-		"Allocated %dMiB VRAM for framebuffer + offscreen pixmaps, at offset 0x%X\n",
-		(uint32_t)(pNv->FB->size >> 20), (uint32_t) pNv->FB->offset);
-#ifdef XF86DRM_MODE
-	if (pNv->kms_enable)
-		drmmode_set_fb(pScrn, pNv->drmmode, pScrn->virtualX, pScrn->virtualY, pScrn->displayWidth*(pScrn->bitsPerPixel >> 3), pNv->FB);
-#endif
-#endif
-
 	if (pNv->AGPSize) {
 		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
 			   "AGPGART: %dMiB available\n",
@@ -2300,13 +2285,23 @@ NVScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
 			return FALSE;
 	}
 
-#if NOUVEAU_EXA_PIXMAPS
 	if (nouveau_bo_new(pNv->dev, NOUVEAU_BO_VRAM | NOUVEAU_BO_PIN,
-			0, NOUVEAU_ALIGN(pScrn->virtualX, 64) * NOUVEAU_ALIGN(pScrn->virtualY, 64) *
+			0,
+			NOUVEAU_ALIGN(pScrn->virtualX, 64) *
+			NOUVEAU_ALIGN(pScrn->virtualY, 64) *
 			(pScrn->bitsPerPixel >> 3), &pNv->FB)) {
-		xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "Failed to allocate memory for screen pixmap.\n");
+		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+			   "Failed to allocate memory for screen pixmap.\n");
 		return FALSE;
 	}
+
+	nouveau_bo_map(pNv->FB, NOUVEAU_BO_RDWR);
+	pNv->FBMap = pNv->FB->map;
+	nouveau_bo_unmap(pNv->FB);
+
+#ifdef XF86DRM_MODE
+	if (pNv->kms_enable)
+		drmmode_set_fb(pScrn, pNv->drmmode, pScrn->virtualX, pScrn->virtualY, pScrn->displayWidth*(pScrn->bitsPerPixel >> 3), pNv->FB);
 #endif
 
 	if (!pNv->randr12_enable) {

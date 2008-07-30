@@ -39,7 +39,6 @@
 /* not using for the moment */
 uint32_t drmmode_create_new_fb(ScrnInfoPtr pScrn, int width, int height, int *pitch)
 {
-#if NOUVEAU_EXA_PIXMAPS
 	NVPtr pNv = NVPTR(pScrn);
 	int ret = 0;
 
@@ -66,9 +65,6 @@ uint32_t drmmode_create_new_fb(ScrnInfoPtr pScrn, int width, int height, int *pi
 		return 0;
 
 	return pNv->FB.handle;
-#else
-	return 0; /* we have a fixed FB */
-#endif /* NOUVEAU_EXA_PIXMAPS */
 }
 
 #if 0
