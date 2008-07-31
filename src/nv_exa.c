@@ -105,9 +105,28 @@ static CARD32 rectFormat(DrawablePtr pDrawable)
 }
 
 /* EXA acceleration hooks */
-static void NVExaWaitMarker(ScreenPtr pScreen, int marker)
+static int
+NVExaMarkSync(ScreenPtr pScreen)
 {
-	NVSync(xf86Screens[pScreen->myNum]);
+	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	NVPtr pNv = NVPTR(pScrn);
+
+	nouveau_fence_ref(pNv->chan->pushbuf->fence, &pNv->exa_sync);
+	return 0;
+}
+
+static void
+NVExaWaitMarker(ScreenPtr pScreen, int marker)
+{
+	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	NVPtr pNv = NVPTR(pScrn);
+
+	/*XXX*/
+	struct nouveau_fence_priv *nvfence = nouveau_fence(pNv->exa_sync);
+	if (!nvfence->emitted)
+		FIRE_RING(pNv->chan);
+
+	nouveau_fence_wait(&pNv->exa_sync);
 }
 
 static Bool NVExaPrepareSolid(PixmapPtr pPixmap,
@@ -915,6 +934,7 @@ NVExaInit(ScreenPtr pScreen)
 		pNv->EXADriverPtr->maxY = 2048;
 	}
 
+	pNv->EXADriverPtr->MarkSync   = NVExaMarkSync;
 	pNv->EXADriverPtr->WaitMarker = NVExaWaitMarker;
 
 	/* Install default hooks */

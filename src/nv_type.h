@@ -517,6 +517,8 @@ typedef struct _NVRec {
 	struct nouveau_grobj *Nv2D;
 	struct nouveau_grobj *Nv3D;
 	struct nouveau_bo *tesla_scratch;
+
+	struct nouveau_fence *exa_sync;
 } NVRec;
 
 #define NVPTR(p) ((NVPtr)((p)->driverPrivate))
