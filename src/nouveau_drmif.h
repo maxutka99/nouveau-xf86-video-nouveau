@@ -44,7 +44,8 @@ struct nouveau_device_priv {
 	drmLock *lock;
 	int needs_close;
 
-	struct drm_nouveau_mem_alloc sa;
+	unsigned sa_handle;
+	uint64_t sa_offset;
 	void *sa_map;
 	struct nouveau_resource *sa_heap;
 };
@@ -247,20 +248,23 @@ nouveau_notifier_wait_status(struct nouveau_notifier *, int id, int status,
 struct nouveau_bo_priv {
 	struct nouveau_bo base;
 
+	unsigned size;
+	unsigned align;
+	int refcount;
+
 	struct nouveau_pushbuf_bo *pending;
 	struct nouveau_fence *fence;
 	struct nouveau_fence *wr_fence;
 
-	struct drm_nouveau_mem_alloc drm;
-	void *map;
-
 	void *sysmem;
 	int user;
 
-	int refcount;
+	unsigned handle;
+	void *map;
 
+	int pinned;
 	uint64_t offset;
-	uint64_t flags;
+	uint32_t domain;
 };
 #define nouveau_bo(n) ((struct nouveau_bo_priv *)(n))
 

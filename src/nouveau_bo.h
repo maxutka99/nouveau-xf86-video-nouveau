@@ -46,9 +46,10 @@ struct nouveau_bo {
 	uint64_t size;
 	void *map;
 
+	int tiled;
+
 	uint32_t flags;
 	uint64_t offset;
-	int tiled;
 };
 
 #endif

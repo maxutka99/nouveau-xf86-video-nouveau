@@ -25,56 +25,84 @@
 #include <errno.h>
 #include <assert.h>
 
+#include <sys/mman.h>
+#include <sys/ioctl.h>
+
 #include "nouveau_drmif.h"
 #include "nouveau_dma.h"
 #include "nouveau_local.h"
 
 static void
-nouveau_mem_free(struct nouveau_device *dev, struct drm_nouveau_mem_alloc *ma,
-		 void **map)
+nouveau_mem_free(struct nouveau_device *dev, unsigned *handle, void **map,
+		 unsigned size)
 {
 	struct nouveau_device_priv *nvdev = nouveau_device(dev);
-	struct drm_nouveau_mem_free mf;
 
 	if (map && *map) {
-		drmUnmap(*map, ma->size);
+		munmap(*map, size);
 		*map = NULL;
 	}
 
-	if (ma->size) {
-		mf.offset = ma->offset;
-		mf.flags = ma->flags;
-		drmCommandWrite(nvdev->fd, DRM_NOUVEAU_MEM_FREE,
-				&mf, sizeof(mf));
-		ma->size = 0;
+	if (handle && *handle) {
+		struct drm_gem_close req;
+
+		req.handle = *handle;
+		*handle = 0;
+
+		ioctl(nvdev->fd, DRM_IOCTL_GEM_CLOSE, &req);
 	}
 }
 
 static int
 nouveau_mem_alloc(struct nouveau_device *dev, unsigned size, unsigned align,
-		  uint32_t flags, struct drm_nouveau_mem_alloc *ma, void **map)
+		  uint32_t flags, unsigned *handle, void **map)
 {
 	struct nouveau_device_priv *nvdev = nouveau_device(dev);
+	struct drm_nouveau_gem_new req;
 	int ret;
 
-	ma->alignment = align;
-	ma->size = size;
-	ma->flags = flags;
-	if (map)
-		ma->flags |= NOUVEAU_MEM_MAPPED;
-	ret = drmCommandWriteRead(nvdev->fd, DRM_NOUVEAU_MEM_ALLOC, ma,
-				  sizeof(struct drm_nouveau_mem_alloc));
+	req.size = size;
+	req.align = align;
+	req.domain = flags;
+	ret = drmCommandWriteRead(nvdev->fd, DRM_NOUVEAU_GEM_NEW, &req,
+				  sizeof(struct drm_nouveau_gem_new));
+	if (ret)
+		return ret;
+	*handle = req.handle;
+
+	if (map) {
+		struct drm_nouveau_gem_mmap m_req;
+
+		m_req.handle = req.handle;
+		ret = drmCommandWriteRead(nvdev->fd, DRM_NOUVEAU_GEM_MMAP,
+					  &m_req, sizeof(m_req));
+		if (ret) {
+			nouveau_mem_free(dev, handle, map, size);
+			return ret;
+		}
+
+		*map = (void *)m_req.vaddr;
+	}
+
+	return 0;
+}
+
+static int
+nouveau_mem_pin(struct nouveau_device *dev, unsigned handle,
+		unsigned *domain, uint64_t *offset)
+{
+	struct nouveau_device_priv *nvdev = nouveau_device(dev);
+	struct drm_nouveau_gem_pin req;
+	int ret;
+
+	req.handle = handle;
+	ret = drmCommandWriteRead(nvdev->fd, DRM_NOUVEAU_GEM_PIN, &req,
+				  sizeof(struct drm_nouveau_gem_pin));
 	if (ret)
 		return ret;
 
-	if (map) {
-		ret = drmMap(nvdev->fd, ma->map_handle, ma->size, map);
-		if (ret) {
-			*map = NULL;
-			nouveau_mem_free(dev, ma, map);
-			return ret;
-		}
-	}
+	if (domain) *domain = req.domain;
+	if (offset) *offset = req.offset;
 
 	return 0;
 }
@@ -141,14 +169,22 @@ nouveau_bo_init(struct nouveau_device *dev)
 	struct nouveau_device_priv *nvdev = nouveau_device(dev);
 	int ret;
 
-	ret = nouveau_mem_alloc(dev, 128*1024, 0, NOUVEAU_MEM_AGP |
-				NOUVEAU_MEM_PCI, &nvdev->sa, &nvdev->sa_map);
+	ret = nouveau_mem_alloc(dev, 128*1024, 0, NOUVEAU_GEM_DOMAIN_GART,
+				&nvdev->sa_handle, &nvdev->sa_map);
 	if (ret)
 		return ret;
 
-	ret = nouveau_resource_init(&nvdev->sa_heap, 0, nvdev->sa.size);
+	ret = nouveau_mem_pin(dev, nvdev->sa_handle, NULL, &nvdev->sa_offset);
 	if (ret) {
-		nouveau_mem_free(dev, &nvdev->sa, &nvdev->sa_map);
+		nouveau_mem_free(dev, &nvdev->sa_handle, &nvdev->sa_map,
+				 128*1024);
+		return ret;
+	}
+
+	ret = nouveau_resource_init(&nvdev->sa_heap, 0, 128*1024);
+	if (ret) {
+		nouveau_mem_free(dev, &nvdev->sa_handle, &nvdev->sa_map,
+				 128*1024);
 		return ret;
 	}
 
@@ -160,7 +196,7 @@ nouveau_bo_takedown(struct nouveau_device *dev)
 {
 	struct nouveau_device_priv *nvdev = nouveau_device(dev);
 
-	nouveau_mem_free(dev, &nvdev->sa, &nvdev->sa_map);
+	nouveau_mem_free(dev, &nvdev->sa_handle, &nvdev->sa_map, 128*1024);
 }
 
 int
@@ -179,7 +215,8 @@ nouveau_bo_new(struct nouveau_device *dev, uint32_t flags, int align,
 	nvbo->base.device = dev;
 	nvbo->base.size = size;
 	nvbo->base.handle = bo_to_ptr(nvbo);
-	nvbo->drm.alignment = align;
+	nvbo->size = size;
+	nvbo->align = align;
 	nvbo->refcount = 1;
 
 	if (flags & NOUVEAU_BO_TILED) {
@@ -217,7 +254,6 @@ nouveau_bo_user(struct nouveau_device *dev, void *ptr, int size,
 	nvbo->user = 1;
 
 	nvbo->base.size = size;
-	nvbo->base.offset = nvbo->drm.offset;
 	nvbo->base.handle = bo_to_ptr(nvbo);
 	nvbo->refcount = 1;
 	*bo = &nvbo->base;
@@ -244,7 +280,8 @@ nouveau_bo_del_cb(void *priv)
 	struct nouveau_bo_priv *nvbo = priv;
 
 	nouveau_fence_ref(NULL, &nvbo->fence);
-	nouveau_mem_free(nvbo->base.device, &nvbo->drm, &nvbo->map);
+	nouveau_mem_free(nvbo->base.device, &nvbo->handle, &nvbo->map,
+			 nvbo->size);
 	if (nvbo->sysmem && !nvbo->user)
 		free(nvbo->sysmem);
 	free(nvbo);
@@ -306,12 +343,8 @@ nouveau_bo_unmap(struct nouveau_bo *bo)
 uint64_t
 nouveau_bo_get_drm_map(struct nouveau_bo *bo)
 {
-	struct nouveau_bo_priv *nvbo = nouveau_bo(bo);
-
-	if (!nvbo)
-		return 0;
-
-	return nvbo->drm.map_handle;
+	NOUVEAU_ERR("-EINVAL :)\n");
+	return 0;
 }
 
 static int
@@ -319,7 +352,7 @@ nouveau_bo_upload(struct nouveau_bo_priv *nvbo)
 {
 	if (nvbo->fence)
 		nouveau_fence_wait(&nvbo->fence);
-	memcpy(nvbo->map, nvbo->sysmem, nvbo->drm.size);
+	memcpy(nvbo->map, nvbo->sysmem, nvbo->size);
 	return 0;
 }
 
@@ -327,40 +360,38 @@ int
 nouveau_bo_set_status(struct nouveau_bo *bo, uint32_t flags)
 {
 	struct nouveau_bo_priv *nvbo = nouveau_bo(bo);
-	struct drm_nouveau_mem_alloc new;
+	unsigned new_handle = 0;
 	void *new_map = NULL, *new_sysmem = NULL;
-	unsigned new_flags = 0, ret;
+	unsigned new_domain = 0, ret;
 
 	assert(!bo->map);
 
 	/* Check current memtype vs requested, if they match do nothing */
-	if ((nvbo->drm.flags & NOUVEAU_MEM_FB) && (flags & NOUVEAU_BO_VRAM))
+	if ((nvbo->domain & NOUVEAU_GEM_DOMAIN_VRAM) &&
+	    (flags & NOUVEAU_BO_VRAM))
 		return 0;
-	if ((nvbo->drm.flags & (NOUVEAU_MEM_AGP | NOUVEAU_MEM_PCI)) &&
+	if ((nvbo->domain & (NOUVEAU_GEM_DOMAIN_GART)) &&
 	    (flags & NOUVEAU_BO_GART))
 		return 0;
-	if (nvbo->drm.size == 0 && nvbo->sysmem && (flags & NOUVEAU_BO_LOCAL))
+	if (!nvbo->handle && nvbo->sysmem && (flags & NOUVEAU_BO_LOCAL))
 		return 0;
-
-	memset(&new, 0x00, sizeof(new));
 
 	/* Allocate new memory */
 	if (flags & NOUVEAU_BO_VRAM)
-		new_flags |= NOUVEAU_MEM_FB;
+		new_domain |= NOUVEAU_GEM_DOMAIN_VRAM;
 	else
 	if (flags & NOUVEAU_BO_GART)
-		new_flags |= (NOUVEAU_MEM_AGP | NOUVEAU_MEM_PCI);
+		new_domain |= NOUVEAU_GEM_DOMAIN_GART;
 	
 	if (nvbo->base.tiled && flags) {
-		new_flags |= NOUVEAU_MEM_TILE;
+		new_domain |= NOUVEAU_GEM_DOMAIN_TILE;
 		if (nvbo->base.tiled & 2)
-			new_flags |= NOUVEAU_MEM_TILE_ZETA;
+			new_domain |= NOUVEAU_GEM_DOMAIN_TILE_ZETA;
 	}
 
-	if (new_flags) {
-		ret = nouveau_mem_alloc(bo->device, bo->size,
-					nvbo->drm.alignment, new_flags,
-					&new, &new_map);
+	if (new_domain) {
+		ret = nouveau_mem_alloc(bo->device, nvbo->size, nvbo->align,
+					new_domain, &new_handle, &new_map);
 		if (ret)
 			return ret;
 	} else
@@ -382,16 +413,26 @@ nouveau_bo_set_status(struct nouveau_bo *bo, uint32_t flags)
 	/* Free old memory */
 	if (nvbo->fence)
 		nouveau_fence_wait(&nvbo->fence);
-	nouveau_mem_free(bo->device, &nvbo->drm, &nvbo->map);
+	nouveau_mem_free(bo->device, &nvbo->handle, &nvbo->map, nvbo->size);
 	if (nvbo->sysmem && !nvbo->user)
 		free(nvbo->sysmem);
 
-	nvbo->drm = new;
+	nvbo->handle = new_handle;
 	nvbo->map = new_map;
 	if (!nvbo->user)
 		nvbo->sysmem = new_sysmem;
-	bo->flags = flags;
-	bo->offset = nvbo->drm.offset;
+
+	if (nvbo->handle) {
+		nouveau_mem_pin(bo->device, nvbo->handle, &nvbo->domain,
+				&nvbo->offset);
+		bo->offset = nvbo->offset;
+		if (nvbo->domain & NOUVEAU_GEM_DOMAIN_VRAM)
+			bo->flags = NOUVEAU_BO_VRAM;
+		else
+		if (nvbo->domain & NOUVEAU_GEM_DOMAIN_GART)
+			bo->flags = NOUVEAU_BO_GART;
+	}
+
 	return 0;
 }
 
@@ -404,7 +445,7 @@ nouveau_bo_validate_user(struct nouveau_channel *chan, struct nouveau_bo *bo,
 	struct nouveau_bo_priv *nvbo = nouveau_bo(bo);
 	struct nouveau_resource *r;
 
-	if (nvchan->user_charge + bo->size > nvdev->sa.size)
+	if (nvchan->user_charge + bo->size > (128*1024))
 		return 1;
 
 	if (!(flags & NOUVEAU_BO_GART))
@@ -417,8 +458,8 @@ nouveau_bo_validate_user(struct nouveau_channel *chan, struct nouveau_bo *bo,
 
 	memcpy(nvdev->sa_map + r->start, nvbo->sysmem, bo->size);
 
-	nvbo->offset = nvdev->sa.offset + r->start;
-	nvbo->flags = NOUVEAU_BO_GART;
+	nvbo->domain = NOUVEAU_GEM_DOMAIN_GART;
+	nvbo->offset = nvdev->sa_offset + r->start;
 	return 0;
 }
 
@@ -440,12 +481,6 @@ nouveau_bo_validate_bo(struct nouveau_channel *chan, struct nouveau_bo *bo,
 
 	if (nvbo->user)
 		nouveau_bo_upload(nvbo);
-
-	nvbo->offset = nvbo->drm.offset;
-	if (nvbo->drm.flags & (NOUVEAU_MEM_AGP | NOUVEAU_MEM_PCI))
-		nvbo->flags = NOUVEAU_BO_GART;
-	else
-		nvbo->flags = NOUVEAU_BO_VRAM;
 
 	return 0;
 }

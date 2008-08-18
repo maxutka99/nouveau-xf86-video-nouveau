@@ -108,19 +108,20 @@ static uint32_t
 nouveau_pushbuf_calc_reloc(struct nouveau_bo *bo,
 			   struct nouveau_pushbuf_reloc *r)
 {
+	struct nouveau_bo_priv *nvbo = nouveau_bo(bo);
 	uint32_t push;
 
 	if (r->flags & NOUVEAU_BO_LOW) {
-		push = bo->offset + r->data;
+		push = nvbo->offset + r->data;
 	} else
 	if (r->flags & NOUVEAU_BO_HIGH) {
-		push = (bo->offset + r->data) >> 32;
+		push = (nvbo->offset + r->data) >> 32;
 	} else {
 		push = r->data;
 	}
 
 	if (r->flags & NOUVEAU_BO_OR) {
-		if (bo->flags & NOUVEAU_BO_VRAM)
+		if (nvbo->domain & NOUVEAU_GEM_DOMAIN_VRAM)
 			push |= r->vor;
 		else
 			push |= r->tor;
@@ -167,6 +168,9 @@ nouveau_pushbuf_flush(struct nouveau_channel *chan, unsigned min)
 
 		/* Not yet validated, do it now */
 		if (!(pbbo->handled & 1)) {
+			uint64_t offset = nouveau_bo(bo)->offset;
+			unsigned domain = nouveau_bo(bo)->domain;
+
 			ret = nouveau_bo_validate(chan, bo, pbbo->flags);
 			if (ret) {
 				assert(0);
@@ -174,13 +178,11 @@ nouveau_pushbuf_flush(struct nouveau_channel *chan, unsigned min)
 			}
 			pbbo->handled |= 1;
 
-			if (bo->offset == nouveau_bo(bo)->offset &&
-			    bo->flags == nouveau_bo(bo)->flags) {
+			if (offset == nouveau_bo(bo)->offset &&
+			    domain == nouveau_bo(bo)->domain) {
 				pbbo->handled |= 2;
 				continue;
 			}
-			bo->offset = nouveau_bo(bo)->offset;
-			bo->flags = nouveau_bo(bo)->flags;
 		}
 
 		/* Apply the relocation */
