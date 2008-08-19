@@ -43,11 +43,6 @@ struct nouveau_device_priv {
 	drm_context_t ctx;
 	drmLock *lock;
 	int needs_close;
-
-	unsigned sa_handle;
-	uint64_t sa_offset;
-	void *sa_map;
-	struct nouveau_resource *sa_heap;
 };
 #define nouveau_device(n) ((struct nouveau_device_priv *)(n))
 
@@ -260,6 +255,12 @@ nouveau_bo_map(struct nouveau_bo *, uint32_t flags);
 
 NOUVEAU_PRIVATE void
 nouveau_bo_unmap(struct nouveau_bo *);
+
+NOUVEAU_PRIVATE int
+nouveau_bo_pin(struct nouveau_bo *, uint32_t flags);
+
+NOUVEAU_PRIVATE void
+nouveau_bo_unpin(struct nouveau_bo *);
 
 NOUVEAU_PRIVATE uint64_t
 nouveau_bo_get_drm_map(struct nouveau_bo *);
