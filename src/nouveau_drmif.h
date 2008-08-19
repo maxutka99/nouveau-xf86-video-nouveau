@@ -108,22 +108,6 @@ nouveau_fence_wait(struct nouveau_fence **);
 NOUVEAU_PRIVATE void
 nouveau_fence_flush(struct nouveau_channel *);
 
-struct nouveau_pushbuf_reloc {
-	struct nouveau_pushbuf_bo *pbbo;
-	uint32_t *ptr;
-	uint32_t flags;
-	uint32_t data;
-	uint32_t vor;
-	uint32_t tor;
-};
-
-struct nouveau_pushbuf_bo {
-	struct nouveau_channel *channel;
-	struct nouveau_bo *bo;
-	unsigned flags;
-	unsigned handled;
-};
-
 #define NOUVEAU_PUSHBUF_MAX_BUFFERS 1024
 #define NOUVEAU_PUSHBUF_MAX_RELOCS 1024
 struct nouveau_pushbuf_priv {
@@ -132,9 +116,9 @@ struct nouveau_pushbuf_priv {
 	unsigned *pushbuf;
 	unsigned  size;
 
-	struct nouveau_pushbuf_bo *buffers;
+	struct drm_nouveau_gem_pushbuf_bo *buffers;
 	unsigned nr_buffers;
-	struct nouveau_pushbuf_reloc *relocs;
+	struct drm_nouveau_gem_pushbuf_reloc *relocs;
 	unsigned nr_relocs;
 };
 #define nouveau_pushbuf(n) ((struct nouveau_pushbuf_priv *)(n))
@@ -231,7 +215,8 @@ struct nouveau_bo_priv {
 	unsigned align;
 	int refcount;
 
-	struct nouveau_pushbuf_bo *pending;
+	struct drm_nouveau_gem_pushbuf_bo *pending;
+	struct nouveau_channel *pending_channel;
 	struct nouveau_fence *fence;
 	struct nouveau_fence *wr_fence;
 
@@ -278,10 +263,6 @@ nouveau_bo_unmap(struct nouveau_bo *);
 
 NOUVEAU_PRIVATE uint64_t
 nouveau_bo_get_drm_map(struct nouveau_bo *);
-
-NOUVEAU_PRIVATE int
-nouveau_bo_validate(struct nouveau_channel *, struct nouveau_bo *,
-		    uint32_t flags);
 
 NOUVEAU_PRIVATE int
 nouveau_resource_init(struct nouveau_resource **heap, unsigned start,
