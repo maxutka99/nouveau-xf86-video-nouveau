@@ -276,9 +276,14 @@ nouveau_bo_map(struct nouveau_bo *bo, uint32_t flags)
 		return -EINVAL;
 
 	if (!nouveau_bo_allocated(nvbo)) {
-		ret = nouveau_bo_ualloc(nvbo);
-		if (ret)
-			return ret;
+		if (nvbo->flags & (NOUVEAU_BO_VRAM | NOUVEAU_BO_GART))
+			nouveau_bo_kalloc(nvbo);
+
+		if (!nouveau_bo_allocated(nvbo)) {
+			ret = nouveau_bo_ualloc(nvbo);
+			if (ret)
+				return ret;
+		}
 	}
 
 	if (nvbo->sysmem) {
