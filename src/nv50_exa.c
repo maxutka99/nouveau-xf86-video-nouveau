@@ -489,20 +489,18 @@ NV50EXATexture(PixmapPtr ppix, PicturePtr ppict, unsigned unit)
 {
 	NV50EXA_LOCALS(ppix);
 	struct nouveau_pixmap *tex = nouveau_pixmap(ppix);
-	const unsigned tic_tsc_flags = NOUVEAU_BO_RD | NOUVEAU_BO_VRAM;
-	const unsigned cb_flags = NOUVEAU_BO_WR | NOUVEAU_BO_VRAM;
 
 	/*XXX: Scanout buffer not tiled, someone needs to figure it out */
 	if (!tex->bo->tiled)
 		NOUVEAU_FALLBACK("pixmap is scanout buffer\n");
 
 	BEGIN_RING(chan, tesla, NV50TCL_TIC_ADDRESS_HIGH, 3);
-	OUT_RELOCh(chan, pNv->tesla_scratch, TIC_OFFSET, tic_tsc_flags);
-	OUT_RELOCl(chan, pNv->tesla_scratch, TIC_OFFSET, tic_tsc_flags);
+	OUT_RELOCh(chan, pNv->tesla_scratch, TIC_OFFSET, TIC_TSC_FLAGS);
+	OUT_RELOCl(chan, pNv->tesla_scratch, TIC_OFFSET, TIC_TSC_FLAGS);
 	OUT_RING  (chan, 0x00000800);
 	BEGIN_RING(chan, tesla, NV50TCL_CB_DEF_ADDRESS_HIGH, 3);
-	OUT_RELOCh(chan, pNv->tesla_scratch, TIC_OFFSET, cb_flags);
-	OUT_RELOCl(chan, pNv->tesla_scratch, TIC_OFFSET, cb_flags);
+	OUT_RELOCh(chan, pNv->tesla_scratch, TIC_OFFSET, CB_FLAGS);
+	OUT_RELOCl(chan, pNv->tesla_scratch, TIC_OFFSET, CB_FLAGS);
 	OUT_RING  (chan, (CB_TIC << NV50TCL_CB_DEF_SET_BUFFER_SHIFT) | 0x4000);
 	BEGIN_RING(chan, tesla, NV50TCL_CB_ADDR, 1);
 	OUT_RING  (chan, CB_TIC | ((unit * 8) << NV50TCL_CB_ADDR_ID_SHIFT));
@@ -562,12 +560,12 @@ NV50EXATexture(PixmapPtr ppix, PicturePtr ppict, unsigned unit)
 	OUT_RELOCh(chan, tex->bo, 0, NOUVEAU_BO_VRAM | NOUVEAU_BO_RD);
 
 	BEGIN_RING(chan, tesla, NV50TCL_TSC_ADDRESS_HIGH, 3);
-	OUT_RELOCh(chan, pNv->tesla_scratch, TSC_OFFSET, tic_tsc_flags);
-	OUT_RELOCl(chan, pNv->tesla_scratch, TSC_OFFSET, tic_tsc_flags);
+	OUT_RELOCh(chan, pNv->tesla_scratch, TSC_OFFSET, TIC_TSC_FLAGS);
+	OUT_RELOCl(chan, pNv->tesla_scratch, TSC_OFFSET, TIC_TSC_FLAGS);
 	OUT_RING  (chan, 0x00000000);
 	BEGIN_RING(chan, tesla, NV50TCL_CB_DEF_ADDRESS_HIGH, 3);
-	OUT_RELOCh(chan, pNv->tesla_scratch, TSC_OFFSET, cb_flags);
-	OUT_RELOCl(chan, pNv->tesla_scratch, TSC_OFFSET, cb_flags);
+	OUT_RELOCh(chan, pNv->tesla_scratch, TSC_OFFSET, CB_FLAGS);
+	OUT_RELOCl(chan, pNv->tesla_scratch, TSC_OFFSET, CB_FLAGS);
 	OUT_RING  (chan, (CB_TSC << NV50TCL_CB_DEF_SET_BUFFER_SHIFT) | 0x4000);
 	BEGIN_RING(chan, tesla, NV50TCL_CB_ADDR, 1);
 	OUT_RING  (chan, CB_TSC | ((unit * 8) << NV50TCL_CB_ADDR_ID_SHIFT));
@@ -720,7 +718,6 @@ NV50EXAPrepareComposite(int op,
 			PixmapPtr pspix, PixmapPtr pmpix, PixmapPtr pdpix)
 {
 	NV50EXA_LOCALS(pspix);
-	const unsigned shd_flags = NOUVEAU_BO_VRAM | NOUVEAU_BO_RD;
 
 	/* Make sure there's enough room for 3D state setup, and to
 	 * at least fit one Composite() call.
@@ -737,11 +734,11 @@ NV50EXAPrepareComposite(int op,
 		     PICT_FORMAT_RGB(pmpict->format));
 
 	BEGIN_RING(chan, tesla, NV50TCL_VP_ADDRESS_HIGH, 2);
-	OUT_RELOCh(chan, pNv->tesla_scratch, PVP_OFFSET, shd_flags);
-	OUT_RELOCl(chan, pNv->tesla_scratch, PVP_OFFSET, shd_flags);
+	OUT_RELOCh(chan, pNv->tesla_scratch, PVP_OFFSET, SHD_FLAGS);
+	OUT_RELOCl(chan, pNv->tesla_scratch, PVP_OFFSET, SHD_FLAGS);
 	BEGIN_RING(chan, tesla, NV50TCL_FP_ADDRESS_HIGH, 2);
-	OUT_RELOCh(chan, pNv->tesla_scratch, PFP_OFFSET, shd_flags);
-	OUT_RELOCl(chan, pNv->tesla_scratch, PFP_OFFSET, shd_flags);
+	OUT_RELOCh(chan, pNv->tesla_scratch, PFP_OFFSET, SHD_FLAGS);
+	OUT_RELOCl(chan, pNv->tesla_scratch, PFP_OFFSET, SHD_FLAGS);
 
 	if (pmpict) {
 		if (!NV50EXATexture(pspix, pspict, 0))
