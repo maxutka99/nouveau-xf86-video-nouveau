@@ -341,6 +341,15 @@ NV50EXADoneCopy(PixmapPtr pdpix)
 	chan->flush_notify = NULL;
 }
 
+static void
+NV50EXAStateSIFCReEmit(struct nouveau_channel *chan)
+{
+	NVPtr pNv = chan->user_private;
+
+	/* Just to tell bufmgr we're using the buffer again */
+	NV50EXAAcquireSurface2D(pNv->dst_pixmap, 0);
+}
+
 Bool
 NV50EXAUploadSIFC(const char *src, int src_pitch,
 		  PixmapPtr pdpix, int x, int y, int w, int h, int cpp)
@@ -348,6 +357,8 @@ NV50EXAUploadSIFC(const char *src, int src_pitch,
 	NV50EXA_LOCALS(pdpix);
 	int line_dwords = (w * cpp + 3) / 4;
 	uint32_t sifc_fmt;
+
+	RING_SPACE(chan, 64);
 
 	if (!NV50EXA2DSurfaceFormat(pdpix, &sifc_fmt))
 		NOUVEAU_FALLBACK("hostdata format\n");
@@ -374,6 +385,9 @@ NV50EXAUploadSIFC(const char *src, int src_pitch,
 	OUT_RING  (chan, 0);
 	OUT_RING  (chan, y);
 
+	chan->flush_notify = NV50EXAStateSIFCReEmit;
+	pNv->dst_pixmap = pdpix;
+
 	while (h--) {
 		int count = line_dwords;
 		const char *p = src;
@@ -392,6 +406,7 @@ NV50EXAUploadSIFC(const char *src, int src_pitch,
 		src += src_pitch;
 	}
 
+	chan->flush_notify = NULL;
 	return TRUE;
 }
 
