@@ -109,6 +109,8 @@ static struct NvFamily NVKnownFamilies[] =
   { "GeForce 6",   "NV4x" },
   { "GeForce 7",   "G7x" },
   { "GeForce 8",   "G8x" },
+  { "GeForce GTX 200", "NVA0" },
+  { "GeForce GTX 400", "NVC0" },
   { NULL, NULL}
 };
 
@@ -254,6 +256,7 @@ NVPciProbe(DriverPtr drv, int entity_num, struct pci_device *pci_dev,
 	case 0x80:
 	case 0x90:
 	case 0xa0:
+	case 0xc0:
 		break;
 	default:
 		xf86DrvMsg(-1, X_ERROR, "Unknown chipset: NV%02x\n", chipset);
@@ -652,6 +655,9 @@ NVPreInit(ScrnInfoPtr pScrn, int flags)
 	case 0xa0:
 		pNv->Architecture = NV_ARCH_50;
 		break;
+	case 0xc0:
+		pNv->Architecture = NV_ARCH_C0;
+		break;
 	default:
 		return FALSE;
 	}
@@ -845,14 +851,26 @@ NVMapMem(ScrnInfoPtr pScrn)
 	size = pScrn->displayWidth * (pScrn->bitsPerPixel >> 3);
 	if (pNv->Architecture >= NV_ARCH_50 && pNv->tiled_scanout) {
 		tile_mode = 4;
-		tile_flags = pScrn->bitsPerPixel == 16 ? 0x7000 : 0x7a00;
-		size *= NOUVEAU_ALIGN(pScrn->virtualY, (1 << (tile_mode + 2)));
+		if (pNv->Architecture == NV_ARCH_C0) {
+			tile_flags = 0xfe0;
+			size *= NOUVEAU_ALIGN(pScrn->virtualY,
+					      (1 << (tile_mode + 3)));
+		} else {
+			tile_flags =
+				pScrn->bitsPerPixel == 16 ? 0x7000 : 0x7a00;
+			size *= NOUVEAU_ALIGN(pScrn->virtualY,
+					      (1 << (tile_mode + 2)));
+		}
 	} else {
 		size *= pScrn->virtualY;
 	}
 
+	xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+		   "new scanout bo: tile_mode=%x, tile_flags=%x\n",
+		   tile_mode, tile_flags);
+
 	ret = nouveau_bo_new_tile(dev, NOUVEAU_BO_VRAM | NOUVEAU_BO_MAP,
-				  0, size, tile_mode, tile_flags,
+				  1 << 17, size, tile_mode, tile_flags,
 				  &pNv->scanout);
 	if (ret) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,

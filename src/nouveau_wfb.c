@@ -180,6 +180,9 @@ nouveau_wfb_setup_wrap(ReadMemoryProcPtr *pRead, WriteMemoryProcPtr *pWrite,
 		wfb->tile_height = bo->tile_mode + 2;
 		wfb->horiz_tiles = wfb->pitch / 64;
 		have_tiled = 1;
+
+		if (1 /* NV_ARCH_C0, FIXME */)
+			wfb->tile_height += 1;
 	}
 
 out:

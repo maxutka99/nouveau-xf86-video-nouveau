@@ -497,6 +497,8 @@ NVAccelCommonInit(ScrnInfoPtr pScrn)
 	if (pNv->NoAccel)
 		return TRUE;
 
+	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "NVAccelCommonInit\n");
+
 	/* General engine objects */
 	INIT_CONTEXT_OBJECT(DmaNotifier0);
 
@@ -512,13 +514,23 @@ NVAccelCommonInit(ScrnInfoPtr pScrn)
 		INIT_CONTEXT_OBJECT(ScaledImage);
 		INIT_CONTEXT_OBJECT(ClipRectangle);
 		INIT_CONTEXT_OBJECT(ImageFromCpu);
-	} else {
+	} else
+	if (pNv->Architecture < NV_ARCH_C0) {
 		INIT_CONTEXT_OBJECT(2D_NV50);
+	} else {
+		INIT_CONTEXT_OBJECT(2D_NVC0);
 	}
-	INIT_CONTEXT_OBJECT(MemFormat);
+
+	if (pNv->Architecture < NV_ARCH_C0)
+		INIT_CONTEXT_OBJECT(MemFormat);
+	else
+		INIT_CONTEXT_OBJECT(M2MF_NVC0);
 
 	/* 3D init */
 	switch (pNv->Architecture) {
+	case NV_ARCH_C0:
+		INIT_CONTEXT_OBJECT(NVC0TCL);
+		break;
 	case NV_ARCH_50:
 		INIT_CONTEXT_OBJECT(NV50TCL);
 		break;
@@ -561,11 +573,15 @@ void NVAccelFree(ScrnInfoPtr pScrn)
 		nouveau_grobj_free(&pNv->NvClipRectangle);
 		nouveau_grobj_free(&pNv->NvImageFromCpu);
 	} else
+	if (pNv->Architecture < NV_ARCH_C0)
 		nouveau_grobj_free(&pNv->Nv2D);
-	nouveau_grobj_free(&pNv->NvMemFormat);
 
-	nouveau_grobj_free(&pNv->NvSW);
-	nouveau_grobj_free(&pNv->Nv3D);
+	if (pNv->Architecture < NV_ARCH_C0) {
+		nouveau_grobj_free(&pNv->NvMemFormat);
+
+		nouveau_grobj_free(&pNv->NvSW);
+		nouveau_grobj_free(&pNv->Nv3D);
+	}
 
 	nouveau_bo_ref(NULL, &pNv->tesla_scratch);
 	nouveau_bo_ref(NULL, &pNv->shader_mem);

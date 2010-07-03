@@ -343,12 +343,26 @@ nouveau_exa_create_pixmap(ScreenPtr pScreen, int width, int height, int depth,
 			else if (height >  4) tile_mode = 1;
 			else                  tile_mode = 0;
 
-			if (usage_hint & NOUVEAU_CREATE_PIXMAP_ZETA)
-				tile_flags = 0x2800;
-			else
-				tile_flags = 0x7000;
+			if (pNv->Architecture >= NV_ARCH_C0) {
+				if (tile_mode && height <= 64)
+					tile_mode -= 1;
 
-			height = NOUVEAU_ALIGN(height, 1 << (tile_mode + 2));
+				if (usage_hint & NOUVEAU_CREATE_PIXMAP_ZETA)
+					tile_flags = 0xdb0;
+				else
+					tile_flags = 0xfe0;
+
+				height = NOUVEAU_ALIGN(
+					height, 1 << (tile_mode + 3));
+			} else {
+				if (usage_hint & NOUVEAU_CREATE_PIXMAP_ZETA)
+					tile_flags = 0x2800;
+				else
+					tile_flags = 0x7000;
+
+				height = NOUVEAU_ALIGN(
+					height, 1 << (tile_mode + 2));
+			}
 		} else {
 			if (usage_hint & NOUVEAU_CREATE_PIXMAP_TILED) {
 				int pitch_align =
@@ -365,6 +379,10 @@ nouveau_exa_create_pixmap(ScreenPtr pScreen, int width, int height, int depth,
 
 	*new_pitch = NOUVEAU_ALIGN(*new_pitch, 64);
 	size  = *new_pitch * height;
+
+	xf86DrvMsg(xf86Screens[pScreen->myNum]->scrnIndex, X_INFO,
+		   "exaCreatePixmap: tile_mode=%x tile_flags=%x size=%x\n",
+		   tile_mode, tile_flags, size);
 
 	ret = nouveau_bo_new_tile(pNv->dev, flags, 0, size, tile_mode,
 				  tile_flags, &nvpix->bo);
@@ -394,7 +412,7 @@ nv50_style_tiled_pixmap(PixmapPtr ppix)
 	ScrnInfoPtr pScrn = xf86Screens[ppix->drawable.pScreen->myNum];
 	NVPtr pNv = NVPTR(pScrn);
 
-	return pNv->Architecture == NV_ARCH_50 &&
+	return pNv->Architecture >= NV_ARCH_50 &&
 		nouveau_pixmap_bo(ppix)->tile_flags;
 }
 
@@ -414,6 +432,10 @@ nouveau_exa_download_from_screen(PixmapPtr pspix, int x, int y, int w, int h,
 	offset = (y * src_pitch) + (x * cpp);
 
 	if (pNv->GART) {
+		if ((pNv->Architecture >= NV_ARCH_C0) &&
+		    NVC0AccelDownloadM2MF(pspix, x, y, w, h, dst, dst_pitch))
+			return TRUE;
+		else
 		if (NVAccelDownloadM2MF(pspix, x, y, w, h, dst, dst_pitch))
 			return TRUE;
 	}
@@ -450,8 +472,15 @@ nouveau_exa_upload_to_screen(PixmapPtr pdpix, int x, int y, int w, int h,
 				exaMarkSync(pdpix->drawable.pScreen);
 				return TRUE;
 			}
-		} else {
+		} else
+		if (pNv->Architecture < NV_ARCH_C0) {
 			if (NV50EXAUploadSIFC(src, src_pitch, pdpix,
+					      x, y, w, h, cpp)) {
+				exaMarkSync(pdpix->drawable.pScreen);
+				return TRUE;
+			}
+		} else {
+			if (NVC0EXAUploadSIFC(src, src_pitch, pdpix,
 					      x, y, w, h, cpp)) {
 				exaMarkSync(pdpix->drawable.pScreen);
 				return TRUE;
@@ -461,6 +490,11 @@ nouveau_exa_upload_to_screen(PixmapPtr pdpix, int x, int y, int w, int h,
 
 	/* try gart-based transfer */
 	if (pNv->GART) {
+		if ((pNv->Architecture >= NV_ARCH_C0) &&
+		    NVC0AccelUploadM2MF(pdpix, x, y, w, h, src, src_pitch)) {
+			exaMarkSync(pdpix->drawable.pScreen);
+			return TRUE;
+		} else
 		if (NVAccelUploadM2MF(pdpix, x, y, w, h, src, src_pitch)) {
 			exaMarkSync(pdpix->drawable.pScreen);
 			return TRUE;
@@ -500,6 +534,8 @@ nouveau_exa_init(ScreenPtr pScreen)
 		pNv->NoAccel = TRUE;
 		return FALSE;
 	}
+
+	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "nouveau EXA init\n");
 
 	exa->exa_major = EXA_VERSION_MAJOR;
 	exa->exa_minor = EXA_VERSION_MINOR;
@@ -582,12 +618,29 @@ nouveau_exa_init(ScreenPtr pScreen)
 		exa->Composite        = NV50EXAComposite;
 		exa->DoneComposite    = NV50EXADoneComposite;
 		break;
+	case NV_ARCH_C0:
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+			   "EXA func pointers for NVC0\n");
+		exa->PrepareCopy = NVC0EXAPrepareCopy;
+		exa->Copy        = NVC0EXACopy;
+		exa->DoneCopy    = NVC0EXADoneCopy;
+
+		exa->PrepareSolid = NVC0EXAPrepareSolid;
+		exa->Solid        = NVC0EXASolid;
+		exa->DoneSolid    = NVC0EXADoneSolid;
+
+		exa->CheckComposite   = NVC0EXACheckComposite;
+		exa->PrepareComposite = NVC0EXAPrepareComposite;
+		exa->Composite        = NVC0EXAComposite;
+		exa->DoneComposite    = NVC0EXADoneComposite;
+		break;
 	default:
 		break;
 	}
 
 	if (!exaDriverInit(pScreen, exa))
 		return FALSE;
+	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "exaDriverInit successful\n");
 
 	pNv->EXADriverPtr = exa;
 	return TRUE;

@@ -54,12 +54,21 @@ void NVSync(ScrnInfoPtr pScrn)
 	if (pNv->NoAccel)
 		return;
 
+	return; /* XXX */
+
 	/* Wait for nvchannel to go completely idle */
 	nouveau_notifier_reset(pNv->notify0, 0);
-	BEGIN_RING(chan, gr, 0x104, 1);
-	OUT_RING  (chan, 0);
-	BEGIN_RING(chan, gr, 0x100, 1);
-	OUT_RING  (chan, 0);
+	if (pNv->Architecture >= NV_ARCH_C0) {
+		BEGIN_RING_NVC0(chan, NvSub2D, 0x0104, 1);
+		OUT_RING       (chan, 0);
+		BEGIN_RING_NVC0(chan, NvSub2D, 0x0100, 1);
+		OUT_RING       (chan, 0);
+	} else {
+		BEGIN_RING(chan, gr, 0x104, 1);
+		OUT_RING  (chan, 0);
+		BEGIN_RING(chan, gr, 0x100, 1);
+		OUT_RING  (chan, 0);
+	}
 	FIRE_RING (chan);
 	if (nouveau_notifier_wait_status(pNv->notify0, 0,
 					 NV_NOTIFY_STATE_STATUS_COMPLETED, 2.0))

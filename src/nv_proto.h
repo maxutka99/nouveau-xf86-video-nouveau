@@ -127,6 +127,11 @@ int NV40SetTexturePortAttribute(ScrnInfoPtr, Atom, INT32, pointer);
 /* in nv50_accel.c */
 Bool NVAccelInitNV50TCL(ScrnInfoPtr pScrn);
 
+/* in nvc0_accel.c */
+Bool NVAccelInitNVC0TCL(ScrnInfoPtr pScrn);
+Bool NVAccelInitM2MF_NVC0(ScrnInfoPtr pScrn);
+Bool NVAccelInit2D_NVC0(ScrnInfoPtr pScrn);
+
 /* in nv50_exa.c */
 Bool NV50EXAPrepareSolid(PixmapPtr, int, Pixel, Pixel);
 void NV50EXASolid(PixmapPtr, int, int, int, int);
@@ -140,6 +145,26 @@ Bool NV50EXAPrepareComposite(int, PicturePtr, PicturePtr, PicturePtr,
 void NV50EXAComposite(PixmapPtr, int, int, int, int, int, int, int, int);
 void NV50EXADoneComposite(PixmapPtr);
 Bool NV50EXAUploadSIFC(const char *src, int src_pitch,
+		       PixmapPtr pdPix, int x, int y, int w, int h, int cpp);
+
+/* in nvc0_exa.c */
+Bool NVC0AccelUploadM2MF(PixmapPtr pdpix, int x, int y, int w, int h,
+			 const char *src, int src_pitch);
+Bool NVC0AccelDownloadM2MF(PixmapPtr pspix, int x, int y, int w, int h,
+			   char *dst, unsigned dst_pitch);
+
+Bool NVC0EXAPrepareSolid(PixmapPtr, int, Pixel, Pixel);
+void NVC0EXASolid(PixmapPtr, int, int, int, int);
+void NVC0EXADoneSolid(PixmapPtr);
+Bool NVC0EXAPrepareCopy(PixmapPtr, PixmapPtr, int, int, int, Pixel);
+void NVC0EXACopy(PixmapPtr, int, int, int, int, int, int);
+void NVC0EXADoneCopy(PixmapPtr);
+Bool NVC0EXACheckComposite(int, PicturePtr, PicturePtr, PicturePtr);
+Bool NVC0EXAPrepareComposite(int, PicturePtr, PicturePtr, PicturePtr,
+				  PixmapPtr, PixmapPtr, PixmapPtr);
+void NVC0EXAComposite(PixmapPtr, int, int, int, int, int, int, int, int);
+void NVC0EXADoneComposite(PixmapPtr);
+Bool NVC0EXAUploadSIFC(const char *src, int src_pitch,
 		       PixmapPtr pdPix, int x, int y, int w, int h, int cpp);
 
 /* nv50_xv.c */

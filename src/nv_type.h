@@ -24,6 +24,11 @@
 #define NV_ARCH_30  0x30
 #define NV_ARCH_40  0x40
 #define NV_ARCH_50  0x50
+#define NV_ARCH_C0  0xc0
+
+#define NvSubM2MF 3
+#define NvSub2D   4
+#define NvSub3D   5
 
 /* NV50 */
 typedef struct _NVRec *NVPtr;
