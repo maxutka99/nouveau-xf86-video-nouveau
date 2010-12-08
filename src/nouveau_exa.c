@@ -377,12 +377,15 @@ nouveau_exa_download_from_screen(PixmapPtr pspix, int x, int y, int w, int h,
 	offset = (y * src_pitch) + (x * cpp);
 
 	if (pNv->GART) {
-		if ((pNv->Architecture >= NV_ARCH_C0) &&
-		    NVC0AccelDownloadM2MF(pspix, x, y, w, h, dst, dst_pitch))
-			return TRUE;
-		else
-		if (NVAccelDownloadM2MF(pspix, x, y, w, h, dst, dst_pitch))
-			return TRUE;
+		if (pNv->Architecture >= NV_ARCH_C0) {
+			if (NVC0AccelDownloadM2MF(pspix, x, y, w, h,
+						  dst, dst_pitch))
+				return TRUE;
+		} else {
+			if (NVAccelDownloadM2MF(pspix, x, y, w, h,
+						dst, dst_pitch))
+				return TRUE;
+		}
 	}
 
 	bo = nouveau_pixmap_bo(pspix);
@@ -435,12 +438,10 @@ nouveau_exa_upload_to_screen(PixmapPtr pdpix, int x, int y, int w, int h,
 
 	/* try gart-based transfer */
 	if (pNv->GART) {
-		if ((pNv->Architecture >= NV_ARCH_C0) &&
-		    NVC0AccelUploadM2MF(pdpix, x, y, w, h, src, src_pitch)) {
-			exaMarkSync(pdpix->drawable.pScreen);
-			return TRUE;
-		} else
-		if (NVAccelUploadM2MF(pdpix, x, y, w, h, src, src_pitch)) {
+		Bool ret = (pNv->Architecture >= NV_ARCH_C0) ?
+			NVC0AccelUploadM2MF(pdpix, x, y, w, h, src, src_pitch) :
+			NVAccelUploadM2MF(pdpix, x, y, w, h, src, src_pitch);
+		if (ret) {
 			exaMarkSync(pdpix->drawable.pScreen);
 			return TRUE;
 		}
