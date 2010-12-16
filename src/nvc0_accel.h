@@ -9,7 +9,7 @@
 #define TIC_OFFSET  0x02000 /* Texture Image Control */
 #define TSC_OFFSET  0x03000 /* Texture Sampler Control */
 #define NTFY_OFFSET 0x08000
-#define MISC_OFFSET 0x01000
+#define MISC_OFFSET 0x10000
 
 /* fragment programs */
 #define PFP_S     0x0000 /* (src) */
