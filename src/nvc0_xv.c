@@ -308,9 +308,9 @@ nvc0_xv_state_emit(PixmapPtr ppix, int id, struct nouveau_bo *src,
 	BEGIN_RING(chan, NvSub3D, NVC0_3D_TEX_CACHE_CTL, 1);
 	OUT_RING  (chan, 0);
 
-	BEGIN_RING(chan, NvSub3D, NVC0_3D_BIND_TIC(2), 1);
+	BEGIN_RING(chan, NvSub3D, NVC0_3D_BIND_TIC(4), 1);
 	OUT_RING  (chan, 1);
-	BEGIN_RING(chan, NvSub3D, NVC0_3D_BIND_TIC(2), 1);
+	BEGIN_RING(chan, NvSub3D, NVC0_3D_BIND_TIC(4), 1);
 	OUT_RING  (chan, 0x203);
 
 	return TRUE;
