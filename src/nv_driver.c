@@ -21,6 +21,7 @@
  */
 
 #include <stdio.h>
+#include <sys/stat.h>
 
 #include "nv_include.h"
 
@@ -743,6 +744,8 @@ static Bool
 NVPreInitDRM(ScrnInfoPtr pScrn)
 {
 	NVPtr pNv = NVPTR(pScrn);
+	struct stat sb;
+	char name[128];
 	int ret;
 
 	if (!xf86LoadSubModule(pScrn, "dri2"))
@@ -760,7 +763,13 @@ NVPreInitDRM(ScrnInfoPtr pScrn)
 	if (ret)
 		return FALSE;
 
-	pNv->drm_device_name = drmGetDeviceNameFromFd(pNv->dev->fd);
+	fstat(pNv->dev->fd, &sb);
+	snprintf(name, sizeof(name), "/dev/dri/render%d",
+		 minor(sb.st_rdev) + 128);
+	if (stat(name, &sb) != 0)
+		pNv->drm_device_name = drmGetDeviceNameFromFd(pNv->dev->fd);
+	else
+		pNv->drm_device_name = strdup(name);
 
 	return TRUE;
 }
